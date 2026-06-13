@@ -29,43 +29,17 @@ I am collecting reusable templates here, not large engineered suffix prompts.
 Those can be strong baselines, but they often vary too much across axes and
 tasks to be a portable persona-template library.
 
-## Use
 
-Start with the `main` split on Hugging Face. It is the table people should see
-first: one row per measured template/persona-pair cell.
+## Results
 
-Important columns:
+We test all these persona templates [`data/template_catalog.yaml`](data/template_catalog.yaml).
 
-- `template`: Jinja2 template, with the persona inserted at `{{ persona }}`
-- `score`
-- `on_axis`
-- `off_axis`
-- `positive_persona`
-- `negative_persona`
-- `contrast`
-- `source`
-- `source_type`
-- `template_source`
-- `template_source_url`
+![plot](./out/on_off_axis.png)
 
-Then check `examples` to see the paired completions behind the score.
-
-## Score
-
-```text
-score = 100 * on_axis * (1 - off_axis)
-```
-
-`on_axis` is normalized from the intended-axis judge rating. `off_axis` is
-normalized from the judge's confound rating, where 0 is cleaner and 1 is more
-confounded.
-
-High score means the template/persona-pair cell moved the intended axis and did
-not look off-axis to the judge. Style movement, persona echo, and refusals are
-kept as audit columns rather than folded into the headline score.
 
 <!-- results-snapshot:start -->
 ## Results Snapshot
+
 
 Seed-24 pilot. Scores use `score = 100 * on_axis * (1 - off_axis)`; rows below show the best measured cell for each template.
 
@@ -105,18 +79,55 @@ Out-of-context stress templates:
 | redwood.inspect.aisi.gov.uk/test/persona<br>Role play you are a `{persona}`                                                                                                                                         |   0.0 |
 <!-- results-snapshot:end -->
 
-## Confounds Audited
 
-> My intuition is that many of these are RLHF-ish side effects: helpfulness,
-harmless refusals, honesty tone, sycophancy, polished vagueness, and generic
-assistant style can be large, easy-to-trigger axes that show up instead of the
-thing you meant. - wassname
+## Score
 
-> Another intuition, motivated by staged model-flow reports such as OLMo 3:
-modern models often stack pretraining, instruction/chat tuning, preference
-tuning, and RL. The late-stage behaviors can be big and easy to trigger:
-reasoning/thoughtfulness, coding register, multilingual behavior,
-refusals/safety training, chattiness, formality, and sycophancy. - wassname
+```text
+score = 100 * on_axis * (1 - off_axis)
+```
+
+`on_axis` is normalized from the intended-axis judge rating. `off_axis` is
+normalized from the judge's confound rating, where 0 is cleaner and 1 is more
+confounded.
+
+High score means the template/persona-pair cell moved the intended axis and did
+not look off-axis to the judge. Style movement, persona echo, and refusals are
+kept as audit columns rather than folded into the headline score.
+
+## Use
+
+Start with the `main` split on Hugging Face. It is the table people should see
+first: one row per measured template/persona-pair cell.
+
+Important columns:
+
+<!-- TODO give concrete example value and desc here, best place for score too? -->
+
+- `template`: Jinja2 template, with the persona inserted at `{{ persona }}`
+- `score`
+- `on_axis`
+- `off_axis`
+- `positive_persona`
+- `negative_persona`
+- `contrast`
+- `source`
+- `source_type`
+- `template_source`
+- `template_source_url`
+
+Then check `examples` to see the paired completions behind the score.
+
+
+## Provenance
+
+The authoritative template inventory is
+[`data/template_catalog.yaml`](data/template_catalog.yaml).
+
+## Off-axis confounds considered
+
+> My intuition is that many of these are RLHF-ish side effects: helpfulness, harmless refusals, honesty tone, sycophancy, polished vagueness, and generic assistant style can be large, easy-to-trigger axes that show up instead of the thing you meant. - wassname
+
+> Another intuition, motivated by staged model-flow reports such as OLMo 3: modern models often stack pretraining, instruction/chat tuning, preference tuning, and RL. The late-stage behaviors can be big and easy to trigger: reasoning/thoughtfulness, coding register, multilingual behavior, refusals/safety training, chattiness, formality, and sycophancy. - wassname
 
 The judge audits length, generic helpfulness, harmlessness/refusal,
 honesty/truthfulness, thoughtfulness/reasoning depth, task-context shift
@@ -125,41 +136,8 @@ hedging, vagueness, warmth, enthusiasm, praise/flattery, sycophancy,
 chattiness, formality, language shift,
 incoherence/repetition/rambling, persona echo, and generic off-axis helpfulness.
 
-Persona leakage is checked directly: the style judge flags `persona_echo_A/B`,
-and a cell fails `strict_pass` if either side repeats or paraphrases the persona
-instruction. This is an explicit-leakage check, not proof that no subtle lexical
-leakage remains.
-
-The separate audit columns include helpfulness, harmlessness/refusal,
-honesty/truthfulness, thoughtfulness/reasoning, task-context shift, coding
-style, multilinguality, verbosity, chattiness, confidence, hedging, vagueness,
-warmth, enthusiasm, praise, sycophancy, directness, formality, language shift,
-and incoherence.
-
-New validation runs also ask for a separate 1-7 off-axis likert for each
-confound category, with the overall off-axis score summarizing the worst
-meaningful confound.
-
 Code [scripts/validate_persona_axes_openrouter.py](scripts/validate_persona_axes_openrouter.py#L474).
 
-## Provenance
-
-The authoritative template inventory is
-[`data/template_catalog.yaml`](data/template_catalog.yaml).
-
-`docs/provenance.md` is only an optional explainer, not an authority layer.
-
-The files `data/template_catalog.jsonl`, `data/templates_v2_candidates.txt`,
-and `data/template_sources.jsonl` are generated runtime artifacts, not the
-source of truth.
-
-Sources are marked in the dataset as `source`, `source_type`, and `source_url`.
-Some entries come from papers, some from associated code/trait files, and some
-from wassname-authored notes, repo-local candidates, or distilled prompts.
-
-Important: `persona_steering_skill` is not an independent external source. It
-is a provenance bucket for repo-authored/distilled material. The YAML is the
-actual list.
 
 ## Acknowledgements
 
@@ -174,6 +152,18 @@ This library samples from or was shaped by:
 - wassname/w2schar-mini: https://github.com/wassname/w2schar-mini
 - wassname/AntiPaSTO3: https://github.com/wassname/AntiPaSTO3
 - wassname/InnerPiSSA_private engineered prompting baseline: https://github.com/wassname/InnerPiSSA_private
+
+## Citation
+
+```bibtex
+@misc{wassname_persona_steering_template_library_2026,
+  title = {Persona Steering Template Library},
+  author = {Wassname},
+  year = {2026},
+  url = {https://github.com/wassname/persona-steering-template-library}
+}
+```
+
 
 ## Appendix: Run
 
@@ -219,13 +209,3 @@ uv run python scripts/plot_on_off_axis.py \
   --label-count 8
 ```
 
-## Citation
-
-```bibtex
-@misc{wassname_persona_steering_template_library_2026,
-  title = {Persona Steering Template Library},
-  author = {Wassname},
-  year = {2026},
-  url = {https://github.com/wassname/persona-steering-template-library}
-}
-```
