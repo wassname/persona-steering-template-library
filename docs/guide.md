@@ -27,9 +27,7 @@ template/persona-pair cell, and source attribution where known.
 ## Score
 
 ```text
-100
-* clamp(mean_axis_delta / 8)
-* clamp((7 - mean_off_axis_problem) / 6)
+score = 100 * on_axis * off_axis_clean
 ```
 
 High score means a measured cell moved the intended axis and did not look

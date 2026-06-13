@@ -48,9 +48,7 @@ Then check `examples` to see the paired completions behind the score.
 ## Score
 
 ```text
-100
-* clamp(mean_axis_delta / 8)
-* clamp((7 - mean_off_axis_problem) / 6)
+score = 100 * on_axis * off_axis_clean
 ```
 
 High score means the template/persona-pair cell moved the intended axis and did

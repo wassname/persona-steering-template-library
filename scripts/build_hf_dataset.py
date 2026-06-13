@@ -33,7 +33,7 @@ V2_PILOT_META = {
     ),
 }
 
-SCORE_FORMULA = "100 * clamp(mean_axis_delta/8) * clamp((7-mean_off_axis_problem)/6)"
+SCORE_FORMULA = "100 * on_axis * off_axis_clean"
 
 
 def _jsonable(value: Any) -> Any:
@@ -86,9 +86,15 @@ def _clamp01(x: float) -> float:
     return max(0.0, min(1.0, x))
 
 
-def _score(row: dict[str, Any]) -> float:
-    on_axis = _clamp01(float(row.get("mean_axis_delta") or 0.0) / 8.0)
-    off_axis_clean = _clamp01((7.0 - float(row.get("mean_off_axis_problem") or 7.0)) / 6.0)
+def _on_axis(row: dict[str, Any]) -> float:
+    return round(_clamp01(float(row.get("mean_axis_delta") or 0.0) / 8.0), 4)
+
+
+def _off_axis_clean(row: dict[str, Any]) -> float:
+    return round(_clamp01((7.0 - float(row.get("mean_off_axis_problem") or 7.0)) / 6.0), 4)
+
+
+def _score(on_axis: float, off_axis_clean: float) -> float:
     return round(100.0 * on_axis * off_axis_clean, 1)
 
 
@@ -129,12 +135,16 @@ def _template_pair_score_rows() -> list[dict[str, Any]]:
         pair = pairs.get(stat["persona_pair"], {})
         n_success = int(stat.get("n") or 0)
         n_errors = errors.get((stat["template"], stat["persona_pair"]), 0)
-        score = _score(stat)
+        on_axis = _on_axis(stat)
+        off_axis_clean = _off_axis_clean(stat)
+        score = _score(on_axis, off_axis_clean)
         source_id = pair.get("source_id", "wassname_v2_candidate")
         rows.append({
             "id": 0,
             "template": _jinja(stat["template"]),
             "score": score,
+            "on_axis": on_axis,
+            "off_axis_clean": off_axis_clean,
             "positive_persona": pair.get("pos"),
             "negative_persona": pair.get("neg"),
             "contrast": f"{pair.get('neg', '')}->{pair.get('pos', '')}",
@@ -330,9 +340,7 @@ Start with `main`.
 The main column is `score`, a conservative 0-100 clean-axis score:
 
 ```text
-100
-* clamp(mean_axis_delta / 8)
-* clamp((7 - mean_off_axis_problem) / 6)
+score = 100 * on_axis * off_axis_clean
 ```
 
 High score means: the template/persona-pair cell moved the intended axis and did not look off-axis to the judge. Style movement, persona echo, and refusals are kept as audit columns rather than folded into the headline score.
