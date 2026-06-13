@@ -27,20 +27,49 @@ channel; the pair supplies the contrastive axis.
 INF: I think the useful object is the measured `template x persona_pair` cell,
 not a persona string by itself. - wassname
 
+If the pair is `honest -> untruthful`, a clean template should move
+truthfulness. `in Paris` versus `in Berlin` is on-axis. `in Paris` versus
+`I refuse to answer` is not clean, because the model mainly changed refusal
+behavior.
+
+## Score
+
+OBS: The clean selection table is `template_pair_scores`.
+
+OBS: `score` is:
+
+```text
+100
+* strict_pass_rate
+* clamp(mean_axis_delta / 8)
+* clamp((7 - mean_off_axis_problem) / 6)
+* clamp((6 - mean_max_style_abs_delta) / 6)
+* (1 - persona_echo_rate)
+* (1 - refusal_or_ai_break_rate)
+```
+
+INF: High score means a measured cell repeatedly moved the intended axis without
+large off-axis, style, persona-echo, or refusal movement.
+
+INF: Low score can mean either "no axis movement" or "movement exists but is
+confounded". Read the component columns before trusting it.
+
 ## Browse
 
-Start with the Hugging Face split `persona_pairs_v2_review`.
+Start with the Hugging Face split `template_pair_scores`.
 
-- `axis`: compact `neg->pos`
-- `positive_behavior` / `negative_behavior`: intended behavioral contrast
-- `proof_grade`: `pilot_recommended`, `pilot_measured_not_promoted`, or `candidate_unmeasured`
-- `best_template`: best measured template for that pair, if measured
-- `best_axis_delta`: intended-axis Likert separation
-- `best_off_axis_problem`: judge-rated confound risk
-- `best_max_style_abs_delta`: largest audited style movement
+- `id`: stable row id
+- `template_jinja`: Jinja2 template with `{{ persona }}`
+- `persona_pair_id`: measured persona pair
+- `score`: clean-axis score
+- `source_id` / `source_type`: attribution when known
+- `mean_axis_delta`: intended-axis movement
+- `mean_off_axis_problem`: confound rating
+- `mean_max_style_abs_delta`: style movement
+- `generator_model` / `judge_model`: measurement models
 
-Then open `v2_pilot_seed23_examples` and read the paired completions. The table
-is only a map; the examples are the proof.
+Then open `v2_pilot_seed23_examples` and read the paired completions. The score
+is a sorting key; the examples are the proof.
 
 ## Wassname Anecdotes / Design Notes
 
@@ -76,6 +105,20 @@ INF: A useful cell should have:
 
 I think `recommended=true` should mean "worth a larger sweep", not "certified".
 - wassname
+
+## Measurement Details
+
+OBS: Current pilot completions use `qwen/qwen3.5-27b`.
+
+OBS: Current pilot judging uses `google/gemini-3.1-flash-lite-preview`.
+
+OBS: Generation uses `temperature=0.0` and seed `23`.
+
+OBS: The judge sees randomized A/B labels and separate positive-axis,
+negative-axis, style, and off-axis/confound prompts.
+
+INF: This reduces sampling, position, and framing confounds. It does not remove
+the usual limitations of one small automatic-judge pilot. - wassname
 
 ## Sources To Check
 
