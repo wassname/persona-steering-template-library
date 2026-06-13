@@ -285,15 +285,16 @@ def _template_score_rows(template_pair_scores: list[dict[str, Any]]) -> list[dic
     for template, rows in by_template.items():
         best = rows[0]
         measured = len(rows)
+        template_source = best["template_source"]
         out.append({
             "id": 0,
             "template": _jinja(template),
             "score": round(sum(float(r["score"]) for r in rows) / measured, 1),
             "best_score": best["score"],
             "best_persona_pair": best["persona_pair"],
-            "source": "wassname_v2_candidate",
-            "source_type": _source_type("wassname_v2_candidate"),
-            "source_url": _source_url("wassname_v2_candidate"),
+            "source": template_source,
+            "source_type": best["template_source_type"],
+            "source_url": best["template_source_url"],
             "raw_template": template,
             "template_key": _slug(template),
             "measurement_id": V2_PILOT_META["measurement_id"],
