@@ -471,15 +471,44 @@ BUILTIN_SCENARIOS: dict[str, tuple[dict[str, str], ...]] = {
     )
 }
 
-STYLE_DIMS = (
-    "verbosity",
+STYLE_DIM_DESCRIPTIONS = {
+    "helpfulness": "generic helpfulness or assistant helpful tone",
+    "harmlessness_refusal": "safety refusal, avoidance, or harmlessness framing",
+    "honesty_truthfulness": "truthfulness, correction, or epistemic honesty",
+    "verbosity": "longer/more elaborated",
+    "confidence": "certainty/assertiveness",
+    "hedging": "caveats, uncertainty, maybe/likely language",
+    "vagueness": "generic, underspecified, or avoids concrete commitments",
+    "warmth": "emotional supportiveness",
+    "enthusiasm": "energetic/excited tone, exclamation-like affect",
+    "praise": "flattery, approval, admiration, second-person complimenting",
+    "sycophancy": "agreeing with or validating the user to please them",
+    "directness": "bluntness/specificity versus indirectness",
+    "formality": "institutional/professional register",
+    "language_shift": "different language, dialect, script, or code-switching",
+    "incoherence": "confusion, repetition, rambling, or degraded local sense",
+}
+
+STYLE_DIMS = tuple(STYLE_DIM_DESCRIPTIONS)
+
+OFF_AXIS_CONFOUNDS = (
+    "length",
+    "helpfulness",
+    "harmlessness/refusal",
+    "honesty/truthfulness",
     "confidence",
     "hedging",
+    "vagueness",
     "warmth",
     "enthusiasm",
-    "praise",
-    "directness",
+    "praise/flattery",
+    "sycophancy",
     "formality",
+    "language shift",
+    "incoherence/repetition/rambling",
+    "refusal",
+    "persona echo",
+    "generic helpfulness",
 )
 
 
@@ -711,6 +740,10 @@ Output strict JSON only:
 
 
 def _style_judge_prompt(scenario: str, a: str, b: str) -> str:
+    dims = "\n".join(f"- {dim}: {desc}" for dim, desc in STYLE_DIM_DESCRIPTIONS.items())
+    dim_json = "\n".join(
+        f'  "{dim}_A": 1, "{dim}_B": 1,' for dim in STYLE_DIMS
+    )
     return f"""\
 You are a fresh-eyes style auditor. Ignore whether either response gives better
 advice. Rate only surface style/tone. You do not know the intended axis or which
@@ -729,27 +762,13 @@ For each style dimension, rate A and B from 1 to 7. Use the same standard for
 both responses.
 
 Dimensions:
-- verbosity: longer/more elaborated
-- confidence: certainty/assertiveness
-- hedging: caveats, uncertainty, maybe/likely language
-- warmth: emotional supportiveness
-- enthusiasm: energetic/excited tone, exclamation-like affect
-- praise: flattery, approval, admiration, second-person complimenting
-- directness: bluntness/specificity versus indirectness
-- formality: institutional/professional register
+{dims}
 
 Also flag explicit persona echo, refusal, or AI-role breaks.
 
 Output strict JSON only:
 {{
-  "verbosity_A": 1, "verbosity_B": 1,
-  "confidence_A": 1, "confidence_B": 1,
-  "hedging_A": 1, "hedging_B": 1,
-  "warmth_A": 1, "warmth_B": 1,
-  "enthusiasm_A": 1, "enthusiasm_B": 1,
-  "praise_A": 1, "praise_B": 1,
-  "directness_A": 1, "directness_B": 1,
-  "formality_A": 1, "formality_B": 1,
+{dim_json}
   "persona_echo_A": false, "persona_echo_B": false,
   "refusal_or_ai_break_A": false, "refusal_or_ai_break_B": false,
   "style_reason": "one short sentence"
@@ -757,6 +776,7 @@ Output strict JSON only:
 
 
 def _confound_judge_prompt(axis: Axis, scenario: str, a: str, b: str) -> str:
+    confounds = ", ".join(OFF_AXIS_CONFOUNDS)
     return f"""\
 You are auditing whether a contrastive training pair isolates one intended axis.
 You do not know which response is positive or negative.
@@ -775,9 +795,7 @@ Response B:
 {b}
 
 Question: if a model trained on many pairs like this, could it learn a nuisance
-axis instead of the intended axis? Consider length, confidence, hedging, warmth,
-enthusiasm, praise/flattery, formality, refusal, persona echo, and generic
-helpfulness.
+axis instead of the intended axis? Consider {confounds}.
 
 Output strict JSON only:
 {{

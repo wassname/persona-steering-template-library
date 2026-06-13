@@ -37,6 +37,26 @@ Low score can mean either "no axis movement" or "movement exists but is
 confounded". Style movement, persona echo, and refusals are audit columns rather
 than part of the headline score.
 
+## Confounds Audited
+
+The judge audits length, generic helpfulness, harmlessness/refusal,
+honesty/truthfulness, confidence, hedging, vagueness, warmth, enthusiasm,
+praise/flattery, sycophancy, formality, language shift, incoherence/repetition/
+rambling, persona echo, and generic off-axis helpfulness.
+
+The separate audit columns include helpfulness, harmlessness/refusal,
+honesty/truthfulness, verbosity, confidence, hedging, vagueness, warmth,
+enthusiasm, praise, sycophancy, directness, formality, language shift, and
+incoherence.
+
+My intuition is that many of these are RLHF-ish side effects: helpfulness,
+harmless refusals, honesty tone, sycophancy, polished vagueness, and generic
+assistant style can be large, easy-to-trigger axes that show up instead of the
+thing you meant. - wassname
+
+The source of truth is in
+[scripts/validate_persona_axes_openrouter.py](../scripts/validate_persona_axes_openrouter.py#L474).
+
 ## Public Splits
 
 - `main`: one row per measured template/persona-pair cell. This is the table to open first.
@@ -50,6 +70,17 @@ judge. But it is better than choosing persona templates by vibe. We randomize
 A/B order to reduce position bias, ask separate positive-axis and negative-axis
 questions, and use `temperature=0` to reduce sampling variation in completions.
 
-Sources are marked as `source` and `source_type`. Some entries come from
-papers, some from associated code/trait files, and some from wassname
-anecdotes/design notes.
+Sources are marked as `source`, `source_type`, and `source_url`. Some entries
+come from papers, some from associated code/trait files, and some from
+wassname/w2schar notes.
+
+## Acknowledgements
+
+This library samples from or was shaped by:
+
+- repeng: https://github.com/vgel/repeng
+- Persona Vectors: https://github.com/safety-research/persona_vectors
+- Assistant Axis: https://github.com/safety-research/assistant-axis
+- weight-steering: https://github.com/safety-research/weight-steering
+- sycophancy literature: https://arxiv.org/abs/2310.13548
+- wassname/w2schar-mini: https://github.com/wassname/w2schar-mini

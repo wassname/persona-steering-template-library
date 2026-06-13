@@ -35,6 +35,45 @@ V2_PILOT_META = {
 
 SCORE_FORMULA = "100 * on_axis * off_axis_clean"
 
+SOURCE_INFO = {
+    "repeng": {
+        "type": "code / practitioner examples",
+        "url": "https://github.com/vgel/repeng",
+    },
+    "assistant_axis": {
+        "type": "associated code / trait files",
+        "url": "https://github.com/safety-research/assistant-axis",
+    },
+    "persona_vectors": {
+        "type": "associated code / trait files",
+        "url": "https://github.com/safety-research/persona_vectors",
+    },
+    "weight_steering": {
+        "type": "associated code / trait files",
+        "url": "https://github.com/safety-research/weight-steering",
+    },
+    "sycophancy_literature": {
+        "type": "paper / literature",
+        "url": "https://arxiv.org/abs/2310.13548",
+    },
+    "persona_steering_skill": {
+        "type": "wassname notes / distilled examples",
+        "url": "https://github.com/wassname/persona-steering-template-library",
+    },
+    "steer_heal_love": {
+        "type": "wassname anecdote / design note",
+        "url": "https://github.com/wassname/w2schar-mini",
+    },
+    "wassname_w2schar": {
+        "type": "wassname w2schar notes",
+        "url": "https://github.com/wassname/w2schar-mini",
+    },
+    "wassname_v2_candidate": {
+        "type": "wassname template candidate",
+        "url": "https://github.com/wassname/persona-steering-template-library",
+    },
+}
+
 
 def _jsonable(value: Any) -> Any:
     if isinstance(value, (dict, list)):
@@ -75,7 +114,8 @@ def _template_rows(path: Path) -> list[dict[str, Any]]:
             "template_jinja": _jinja(line.strip()),
             "template_format": "jinja2",
             "source_id": "wassname_v2_candidate",
-            "source_type": "wassname anecdote / design note",
+            "source_type": _source_type("wassname_v2_candidate"),
+            "source_url": _source_url("wassname_v2_candidate"),
         }
         for i, line in enumerate(path.read_text().splitlines())
         if line.strip()
@@ -103,15 +143,11 @@ def _jinja(template: str) -> str:
 
 
 def _source_type(source_id: str | None) -> str:
-    if source_id in {"repeng"}:
-        return "code / practitioner examples"
-    if source_id in {"assistant_axis", "persona_vectors", "weight_steering"}:
-        return "associated code / trait files"
-    if source_id in {"w2schar_in_house", "steer_heal_love", "wassname_v2_candidate"}:
-        return "wassname anecdote / design note"
-    if source_id:
-        return "source-listed candidate"
-    return "wassname anecdote / design note"
+    return SOURCE_INFO.get(source_id or "", {}).get("type", "source-listed candidate")
+
+
+def _source_url(source_id: str | None) -> str:
+    return SOURCE_INFO.get(source_id or "", {}).get("url", "")
 
 
 def _v2_error_counts() -> dict[tuple[str, str], int]:
@@ -150,6 +186,7 @@ def _template_pair_score_rows() -> list[dict[str, Any]]:
             "contrast": f"{pair.get('neg', '')}->{pair.get('pos', '')}",
             "source": source_id,
             "source_type": _source_type(source_id),
+            "source_url": _source_url(source_id),
             "persona_pair": stat["persona_pair"],
             "positive_behavior": pair.get("positive_behavior"),
             "negative_behavior": pair.get("negative_behavior"),
@@ -200,7 +237,8 @@ def _template_score_rows(template_pair_scores: list[dict[str, Any]]) -> list[dic
             "best_score": best["score"],
             "best_persona_pair": best["persona_pair"],
             "source": "wassname_v2_candidate",
-            "source_type": "wassname anecdote / design note",
+            "source_type": _source_type("wassname_v2_candidate"),
+            "source_url": _source_url("wassname_v2_candidate"),
             "raw_template": template,
             "template_key": _slug(template),
             "measurement_id": V2_PILOT_META["measurement_id"],
@@ -268,6 +306,7 @@ def _persona_pair_review_rows(template_pair_scores: list[dict[str, Any]]) -> lis
             "proof_grade": proof_grade,
             "source": pair.get("source_id"),
             "source_type": _source_type(pair.get("source_id")),
+            "source_url": _source_url(pair.get("source_id")),
             "positive_persona": pair["pos"],
             "negative_persona": pair["neg"],
             "positive_behavior": pair["positive_behavior"],
@@ -347,11 +386,28 @@ High score means: the template/persona-pair cell moved the intended axis and did
 
 Low score can mean either no intended-axis movement or too much confounding. Read the component columns before trusting the score.
 
+## Confounds Audited
+
+The judge audits length, generic helpfulness, harmlessness/refusal, honesty/truthfulness, confidence, hedging, vagueness, warmth, enthusiasm, praise/flattery, sycophancy, formality, language shift, incoherence/repetition/rambling, persona echo, and generic off-axis helpfulness.
+
+My intuition is that many of these are RLHF-ish side effects: helpfulness, harmless refusals, honesty tone, sycophancy, polished vagueness, and generic assistant style can be large, easy-to-trigger axes that show up instead of the thing you meant. - wassname
+
 ## Tables
 
 1. `main`: one row per measured template/persona-pair cell.
 2. `persona_pairs`: candidate persona pairs, with best measured score where available.
 3. `examples`: paired completions and judge ratings behind the score.
+
+## Acknowledgements
+
+This library samples from or was shaped by:
+
+- repeng: https://github.com/vgel/repeng
+- Persona Vectors: https://github.com/safety-research/persona_vectors
+- Assistant Axis: https://github.com/safety-research/assistant-axis
+- weight-steering: https://github.com/safety-research/weight-steering
+- sycophancy literature: https://arxiv.org/abs/2310.13548
+- wassname/w2schar-mini: https://github.com/wassname/w2schar-mini
 """
 
 
