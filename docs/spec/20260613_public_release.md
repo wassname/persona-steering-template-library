@@ -49,3 +49,5 @@ V2 candidate expansion:
 - Added 16 candidate persona pairs, 12 candidate templates, and 12 candidate scenarios.
 - Patched `--axes` to accept a persona-pair JSONL path.
 - `uv run python scripts/validate_persona_axes_openrouter.py --dry-run --axes data/persona_pairs_v2_candidates.jsonl --templates data/templates_v2_candidates.txt --family data/scenarios_v2_candidates.jsonl --n 2 --out out/v2_candidates_dryrun.json` planned 384 pairs.
+- Ran a measured v2 pilot over 4 persona pairs, 4 templates, and 4 scenarios: 64 planned, 59 success, 5 judge JSON failures.
+- Exported pilot stats to `data/v2_pilot_seed23_*`.

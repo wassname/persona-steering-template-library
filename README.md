@@ -41,6 +41,18 @@ V2 candidate material lives separately from measured stats:
 
 These are not promoted templates yet. They are the expanded candidate grid to measure next.
 
+## V2 Pilot
+
+`data/v2_pilot_seed23_*` contains a small measured pilot over 4 behavioral persona pairs, 4 templates, and 4 scenarios.
+
+- planned pairs: 64
+- successful judged pairs: 59
+- judge JSON failures: 5
+- strongest pilot cell: `wellbeing_authority` with `You are a {persona} person thinking through the situation.`
+- next-best pilot cell: `wellbeing_authority` with `You are a {persona} person acting in the world.`
+
+This is still not the full v2 release; it is the first measured slice of the expanded library.
+
 ## Data Files
 
 `data/template_stats.jsonl`
