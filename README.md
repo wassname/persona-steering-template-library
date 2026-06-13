@@ -1,42 +1,49 @@
 # Persona Steering Template Library
 
-Small, measured persona/template pairs for steering-vector and preference-pair experiments.
+Evaluated persona/template candidates for steering-vector and preference-pair experiments.
 
-- Hugging Face dataset: https://huggingface.co/datasets/wassname/persona-steering-template-library
-- Guide: [docs/guide.md](docs/guide.md)
+Dataset: https://huggingface.co/datasets/wassname/persona-steering-template-library
 
-## Example
+## What This Measures
 
-```text
-template:
-  You are a {persona} person thinking through the situation.
+How do we know if a persona template is good? We want on-axis variation, but not
+off-axis variation.
 
-negative persona:
-  authority-deferential even when wellbeing suffers
+If we choose `honest` and `dishonest` personas, use a template like
+`You are a {{ persona }} assistant`, and ask `The Eiffel Tower is in`, we want
+the completions to vary on the honest/dishonest axis. `in Paris` versus
+`in Berlin` shows on-axis variation. `in Paris` versus `I refuse to answer` is
+not good, because it is confounded by refusal. Other confounds include length,
+verbosity, confidence, style, and language.
 
-positive persona:
-  wellbeing-focused even when authority-defying
+So we try persona/template pairs on one model. We use another model as a judge,
+which rates on-axis and off-axis variation. The final `score` rewards on-axis
+variation and penalizes off-axis variation, style movement, persona echo, and
+refusals.
 
-measured pilot:
-  strict_pass_rate = 0.75
-  mean_axis_delta = 6.25
-  mean_off_axis_problem = 2.00
-  mean_max_style_abs_delta = 1.50
-```
+This field is pre-scientific in a way: it is still an art. I collected a wide
+sampling of what people have used, minimally measured it, and put it here to
+make it accessible to more people and agents.
 
-The point is not "this sounds like a good prompt". The point is to measure
-whether the positive and negative personas separate the intended axis without
-mostly separating length, tone, confidence, refusal, or persona-echo.
+The dataset has persona templates in Jinja2 format, scores for each measured
+template/persona-pair cell, and source attribution where known.
 
-If the pair is `honest -> untruthful`, `in Paris` versus `in Berlin` is
-on-axis. `in Paris` versus `I refuse to answer` is not clean: the contrast is
-mostly answer/refusal behavior.
+## Use
+
+Start with the `scores` split on Hugging Face.
+
+Important columns:
+
+- `template_jinja`
+- `score`
+- `persona_pair_id`
+- `axis`
+- `source_id`
+- `source_type`
+
+Then check `judged_examples` to see the paired completions behind the score.
 
 ## Score
-
-On Hugging Face, start with `template_pair_scores`.
-
-`score` is a conservative 0-100 clean-axis score:
 
 ```text
 100
@@ -52,39 +59,13 @@ High score means the template/persona-pair cell repeatedly moved the intended
 axis while staying comparatively clean on off-axis, style, persona-echo, and
 refusal checks.
 
-## What To Browse
+## Provenance
 
-On Hugging Face:
+Sources are marked in the dataset as `source_id` and `source_type`. Some entries
+come from papers, some from associated code/trait files, and some from wassname
+anecdotes/design notes.
 
-- `template_pair_scores`: clean selection table with `id`, `template_jinja`, `score`, source attribution, model metadata, and score components
-- `template_scores`: one row per template, aggregated over measured persona pairs
-- `persona_pairs_v2_review`: one row per candidate persona pair
-- `v2_pilot_seed23_examples`: raw completions and judge ratings
-
-The examples are still the proof. The score is only a fast sorting key.
-
-## Files
-
-- `data/persona_pairs_v2_candidates.jsonl`: candidate persona pairs
-- `data/templates_v2_candidates.txt`: candidate `{persona}` templates
-- `data/scenarios_v2_candidates.jsonl`: scenario prompts for sweeps
-- `data/v2_pilot_seed23_*`: first measured v2 pilot
-- `scripts/validate_persona_axes_openrouter.py`: OpenRouter validation sweep
-- `scripts/export_persona_template_stats.py`: aggregate raw sweep output
-- `scripts/build_hf_dataset.py`: build parquet-only HF upload folder
-
-## Current Status
-
-Preliminary. The current pilot is small: 4 persona pairs x 4 templates x 4
-scenarios. It is enough to show the measurement format and identify a few
-promising cells, not enough to certify a general template.
-
-Current pilot: completions from `qwen/qwen3.5-27b`, judge
-`google/gemini-3.1-flash-lite-preview`, OpenRouter, `temperature=0`, seed `23`.
-A/B labels are randomized; the judge separately rates positive-axis,
-negative-axis, style, and off-axis/confound questions.
-
-## Run
+## Appendix: Run
 
 ```sh
 uv sync
@@ -97,4 +78,18 @@ uv run python scripts/validate_persona_axes_openrouter.py \
   --out out/dryrun.json
 ```
 
-See [docs/guide.md](docs/guide.md) for measured runs, export, and upload.
+```sh
+uv run python scripts/build_hf_dataset.py \
+  --out /tmp/persona-steering-template-library-hf
+```
+
+## Citation
+
+```bibtex
+@misc{wassname_persona_steering_template_library_2026,
+  title = {Persona Steering Template Library},
+  author = {Wassname},
+  year = {2026},
+  url = {https://github.com/wassname/persona-steering-template-library}
+}
+```

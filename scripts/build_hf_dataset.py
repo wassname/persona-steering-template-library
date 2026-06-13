@@ -20,17 +20,6 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 
 
-TABLE_SOURCES = {
-    "template_stats": DATA / "template_stats.jsonl",
-    "template_pair_stats": DATA / "template_pair_stats.jsonl",
-    "examples": DATA / "examples.jsonl",
-    "persona_pairs_v2_candidates": DATA / "persona_pairs_v2_candidates.jsonl",
-    "scenarios_v2_candidates": DATA / "scenarios_v2_candidates.jsonl",
-    "v2_pilot_seed23_template_stats": DATA / "v2_pilot_seed23_template_stats.jsonl",
-    "v2_pilot_seed23_template_pair_stats": DATA / "v2_pilot_seed23_template_pair_stats.jsonl",
-    "v2_pilot_seed23_examples": DATA / "v2_pilot_seed23_examples.jsonl",
-}
-
 V2_PILOT_META = {
     "measurement_id": "v2_pilot_seed23",
     "generator_model": "qwen/qwen3.5-27b",
@@ -324,34 +313,23 @@ configs:
 
 GitHub repository: https://github.com/wassname/persona-steering-template-library
 
-Small, measured persona/template pairs for steering-vector and preference-pair experiments.
+Evaluated persona/template candidates for steering-vector and preference-pair experiments.
 
-## Example
+## What This Measures
 
-```text
-template:
-  You are a {{persona}} person thinking through the situation.
+How do we know if a persona template is good? We want on-axis variation, but not off-axis variation.
 
-negative persona:
-  authority-deferential even when wellbeing suffers
+If we choose `honest` and `dishonest` personas, use a template like `You are a {{{{ persona }}}} assistant`, and ask `The Eiffel Tower is in`, we want the completions to vary on the honest/dishonest axis. `in Paris` versus `in Berlin` shows on-axis variation. `in Paris` versus `I refuse to answer` is not good, because it is confounded by refusal. Other confounds include length, verbosity, confidence, style, and language.
 
-positive persona:
-  wellbeing-focused even when authority-defying
+So we try persona/template pairs on one model. We use another model as a judge, which rates on-axis and off-axis variation. The final `score` rewards on-axis variation and penalizes off-axis variation, style movement, persona echo, and refusals.
 
-measured pilot:
-  strict_pass_rate = 0.75
-  mean_axis_delta = 6.25
-  mean_off_axis_problem = 2.00
-  mean_max_style_abs_delta = 1.50
-```
+This field is pre-scientific in a way: it is still an art. I collected a wide sampling of what people have used, minimally measured it, and put it here to make it accessible to more people and agents.
 
-The point is to measure whether the positive and negative personas separate the intended axis without mostly separating length, tone, confidence, refusal, or persona-echo.
-
-For example, if the persona pair is `honest -> untruthful`, a useful template should make the completions differ on truthfulness. `in Paris` versus `in Berlin` is on-axis. `in Paris` versus `I refuse to answer` is not clean, because the pair is mostly separating answer/refusal behavior.
+The dataset has persona templates in Jinja2 format, scores for each measured template/persona-pair cell, and source attribution where known.
 
 ## Score
 
-Start with `template_pair_scores`.
+Start with `scores`.
 
 The main column is `score`, a conservative 0-100 clean-axis score:
 
@@ -371,37 +349,12 @@ Low score can mean either no intended-axis movement or too much confounding. Rea
 
 ## What To Browse
 
-1. `template_pair_scores`: clean selection table. Columns include `id`, `template_jinja`, `persona_pair_id`, `score`, source attribution, model metadata, and the score components.
+1. `scores`: one row per measured template/persona-pair cell.
 2. `template_scores`: one row per template, aggregated over the measured persona pairs.
-3. `persona_pairs_v2_review`: one row per candidate persona pair.
-4. `v2_pilot_seed23_examples`: raw paired completions and judge ratings.
-
-`persona_pairs_v2_review` gives:
-
-- `axis`: `neg->pos`
-- `positive_behavior` / `negative_behavior`: what the pair should separate
-- `proof_grade`: `pilot_recommended`, `pilot_measured_not_promoted`, or `candidate_unmeasured`
-- `best_template`: best measured template for that pair, if any
-- `best_axis_delta`, `best_off_axis_problem`, `best_max_style_abs_delta`: compact proof stats
-
-Then inspect `v2_pilot_seed23_examples` to read the actual positive/negative completions and judge ratings.
-
-## Measurement
-
-This pilot uses `qwen/qwen3.5-27b` for completions and `google/gemini-3.1-flash-lite-preview` as the judge through OpenRouter. Generation temperature is `0.0`, with seed `23`, to reduce sampling noise.
-
-The judge sees randomized A/B labels. It separately rates positive-axis behavior, negative-axis behavior, surface style, and off-axis/confound risk. This reduces simple position/framing bias, but it is still one automatic judge on one small pilot.
-
-## Current Status
-
-Preliminary. The current pilot is small: 4 persona pairs x 4 templates x 4 scenarios. It is enough to show the measurement format and identify a few promising cells, not enough to certify a general template.
-
-Counts:
-
-- 16 v2 candidate persona pairs
-- 12 v2 candidate templates
-- 12 v2 candidate scenarios
-- v2 pilot: 64 planned pairs, 59 successful judged pairs, 5 judge JSON failures
+3. `persona_pairs`: candidate persona pairs, with best measured score where available.
+4. `template_candidates`: all candidate Jinja2 templates.
+5. `scenario_prompts`: prompts used for the pilot measurement.
+6. `judged_examples`: paired completions and judge ratings.
 """
 
 
@@ -415,28 +368,25 @@ def main() -> None:
     parquet_dir = args.out / "parquet"
     parquet_dir.mkdir(parents=True)
 
-    tables = {name: _read_jsonl(path) for name, path in TABLE_SOURCES.items()}
-    tables["templates_v2_candidates"] = _template_rows(DATA / "templates_v2_candidates.txt")
-    tables["template_pair_scores"] = _template_pair_score_rows()
-    tables["template_scores"] = _template_score_rows(tables["template_pair_scores"])
-    tables["persona_pairs_v2_review"] = _persona_pair_review_rows(tables["template_pair_scores"])
+    tables = {
+        "scores": _template_pair_score_rows(),
+        "template_candidates": _template_rows(DATA / "templates_v2_candidates.txt"),
+        "scenario_prompts": _read_jsonl(DATA / "scenarios_v2_candidates.jsonl"),
+        "judged_examples": _read_jsonl(DATA / "v2_pilot_seed23_examples.jsonl"),
+    }
+    tables["template_scores"] = _template_score_rows(tables["scores"])
+    tables["persona_pairs"] = _persona_pair_review_rows(tables["scores"])
 
     for name, rows in tables.items():
         _write_parquet(parquet_dir / f"{name}.parquet", rows)
 
     names = [
-        "template_pair_scores",
+        "scores",
         "template_scores",
-        "persona_pairs_v2_review",
-        "templates_v2_candidates",
-        "persona_pairs_v2_candidates",
-        "scenarios_v2_candidates",
-        "v2_pilot_seed23_template_pair_stats",
-        "v2_pilot_seed23_template_stats",
-        "v2_pilot_seed23_examples",
-        "template_pair_stats",
-        "template_stats",
-        "examples",
+        "persona_pairs",
+        "template_candidates",
+        "scenario_prompts",
+        "judged_examples",
     ]
     (args.out / "README.md").write_text(_readme(names))
     print(f"built {args.out}")
