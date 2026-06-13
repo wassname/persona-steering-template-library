@@ -40,19 +40,28 @@ than part of the headline score.
 ## Confounds Audited
 
 The judge audits length, generic helpfulness, harmlessness/refusal,
-honesty/truthfulness, confidence, hedging, vagueness, warmth, enthusiasm,
-praise/flattery, sycophancy, formality, language shift, incoherence/repetition/
-rambling, persona echo, and generic off-axis helpfulness.
+honesty/truthfulness, thoughtfulness/reasoning depth, task-context shift
+(code/chat/math/think), coding style, multilingual behavior, confidence,
+hedging, vagueness, warmth, enthusiasm, praise/flattery, sycophancy,
+chattiness, formality, language shift, incoherence/repetition/rambling, persona
+echo, and generic off-axis helpfulness.
 
 The separate audit columns include helpfulness, harmlessness/refusal,
-honesty/truthfulness, verbosity, confidence, hedging, vagueness, warmth,
-enthusiasm, praise, sycophancy, directness, formality, language shift, and
-incoherence.
+honesty/truthfulness, thoughtfulness/reasoning, task-context shift, coding
+style, multilinguality, verbosity, chattiness, confidence, hedging, vagueness,
+warmth, enthusiasm, praise, sycophancy, directness, formality, language shift,
+and incoherence.
 
 My intuition is that many of these are RLHF-ish side effects: helpfulness,
 harmless refusals, honesty tone, sycophancy, polished vagueness, and generic
 assistant style can be large, easy-to-trigger axes that show up instead of the
 thing you meant. - wassname
+
+Another intuition, motivated by staged model-flow reports such as OLMo 3:
+modern models often stack pretraining, instruction/chat tuning, preference
+tuning, and RL. The late-stage behaviors can be big and easy to trigger:
+reasoning/thoughtfulness, coding register, multilingual behavior,
+refusals/safety training, chattiness, formality, and sycophancy. - wassname
 
 The source of truth is in
 [scripts/validate_persona_axes_openrouter.py](../scripts/validate_persona_axes_openrouter.py#L474).
@@ -83,4 +92,5 @@ This library samples from or was shaped by:
 - Assistant Axis: https://github.com/safety-research/assistant-axis
 - weight-steering: https://github.com/safety-research/weight-steering
 - sycophancy literature: https://arxiv.org/abs/2310.13548
+- OLMo 3 report: https://arxiv.org/abs/2512.13961
 - wassname/w2schar-mini: https://github.com/wassname/w2schar-mini

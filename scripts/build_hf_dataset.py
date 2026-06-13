@@ -388,9 +388,11 @@ Low score can mean either no intended-axis movement or too much confounding. Rea
 
 ## Confounds Audited
 
-The judge audits length, generic helpfulness, harmlessness/refusal, honesty/truthfulness, confidence, hedging, vagueness, warmth, enthusiasm, praise/flattery, sycophancy, formality, language shift, incoherence/repetition/rambling, persona echo, and generic off-axis helpfulness.
+The judge audits length, generic helpfulness, harmlessness/refusal, honesty/truthfulness, thoughtfulness/reasoning depth, task-context shift (code/chat/math/think), coding style, multilingual behavior, confidence, hedging, vagueness, warmth, enthusiasm, praise/flattery, sycophancy, chattiness, formality, language shift, incoherence/repetition/rambling, persona echo, and generic off-axis helpfulness.
 
 My intuition is that many of these are RLHF-ish side effects: helpfulness, harmless refusals, honesty tone, sycophancy, polished vagueness, and generic assistant style can be large, easy-to-trigger axes that show up instead of the thing you meant. - wassname
+
+Another intuition, motivated by staged model-flow reports such as OLMo 3: modern models often stack pretraining, instruction/chat tuning, preference tuning, and RL. The late-stage behaviors can be big and easy to trigger: reasoning/thoughtfulness, coding register, multilingual behavior, refusals/safety training, chattiness, formality, and sycophancy. - wassname
 
 ## Tables
 
@@ -407,7 +409,26 @@ This library samples from or was shaped by:
 - Assistant Axis: https://github.com/safety-research/assistant-axis
 - weight-steering: https://github.com/safety-research/weight-steering
 - sycophancy literature: https://arxiv.org/abs/2310.13548
+- OLMo 3 report: https://arxiv.org/abs/2512.13961
 - wassname/w2schar-mini: https://github.com/wassname/w2schar-mini
+
+## Citation
+
+```bibtex
+@misc{{wassname_persona_steering_template_library_2026,
+  title = {{Persona Steering Template Library}},
+  author = {{Wassname}},
+  year = {{2026}},
+  url = {{https://github.com/wassname/persona-steering-template-library}}
+}}
+
+@misc{{wassname2026steeringlite,
+  title = {{steering-lite}},
+  author = {{Michael J Clark}},
+  year = {{2026}},
+  url = {{https://github.com/wassname/steering-lite}}
+}}
+```
 """
 
 
