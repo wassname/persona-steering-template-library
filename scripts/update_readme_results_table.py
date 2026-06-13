@@ -13,7 +13,7 @@ NORMAL_STATS = STATS / "v2_pilot_seed24_template_pair_stats.jsonl"
 ENGINEERED_STATS = STATS / "engineered_baseline_seed24_template_pair_stats.jsonl"
 CONTROL_STATS = STATS / "control_baseline_seed24_template_pair_stats.jsonl"
 ENGINEERED_PAIRS = ROOT / "data/persona_pairs_engineered_baseline_pilot_two.jsonl"
-ENGINEERED_DISPLAY = "engineered long persona prefix"
+ENGINEERED_DISPLAY = "`{engineered long persona prefix}`*"
 
 START = "<!-- results-snapshot:start -->"
 END = "<!-- results-snapshot:end -->"
@@ -84,6 +84,18 @@ def _stress_templates() -> set[str]:
     return out
 
 
+def _engineered_derived_templates() -> set[str]:
+    out = set()
+    for row in load_template_catalog(CATALOG_PATH):
+        if (
+            row["status"] == "active"
+            and row["primary_source_id"] == "innerpissa_engineered"
+            and row["template_jinja"].startswith("Before answering,")
+        ):
+            out.add(jinja_to_runtime(row["template_jinja"]))
+    return out
+
+
 def _table(rows: list[dict]) -> str:
     lines = ["| template | score | judge_std |", "|---|---:|---:|"]
     for row in rows:
@@ -117,6 +129,7 @@ def _results_block() -> str:
         ),
         "Top scored methods:",
         _table(top_rows),
+        "* Not a persona, this is a baseline measurement, AxBench style where an AI model generates a long custom persona.",
     ])
 
 
@@ -139,15 +152,15 @@ def _engineered_prefixes() -> str:
 def _appendix_block() -> str:
     normal_pair_rows = [{**row, "score": _score(row)} for row in _read_jsonl(NORMAL_STATS)]
     stress_templates = _stress_templates()
+    engineered_derived_templates = _engineered_derived_templates()
     stress_mean_rows = [
         row for row in _mean_by_template(normal_pair_rows)
         if row["template"] in stress_templates
     ]
-    stress_detail_rows = sorted(
-        [row for row in normal_pair_rows if row["template"] in stress_templates],
-        key=lambda row: row["score"],
-        reverse=True,
-    )
+    engineered_derived_mean_rows = [
+        row for row in _mean_by_template(normal_pair_rows)
+        if row["template"] in engineered_derived_templates
+    ]
     engineered_pair_rows = sorted(
         ({**row, "score": _score(row)} for row in _read_jsonl(ENGINEERED_STATS)),
         key=lambda row: row["score"],
@@ -165,10 +178,10 @@ def _appendix_block() -> str:
         ),
         "Engineered baseline, comparable mean over both measured axes:",
         _table(engineered_mean),
-        "Engineered baseline, per axis:",
-        _detail_table(engineered_pair_rows),
         "Engineered prefixes:",
         _engineered_prefixes(),
+        "Long engineered-derived templates, comparable mean over both measured axes:",
+        _table(engineered_derived_mean_rows),
         (
             "These simple roleplay and stress strings are called out separately "
             "because some move the obvious axis while many leak the persona "
@@ -177,8 +190,6 @@ def _appendix_block() -> str:
         ),
         "Simple roleplay and stress templates, comparable mean over both measured axes:",
         _table(stress_mean_rows),
-        "Simple roleplay and stress templates, per axis:",
-        _detail_table(stress_detail_rows),
         "Controls:",
         _table(control_rows),
     ])
