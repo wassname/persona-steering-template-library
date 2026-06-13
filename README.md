@@ -6,28 +6,43 @@ Dataset: https://huggingface.co/datasets/wassname/persona-steering-template-libr
 
 ## What This Measures
 
-How do we know if a persona template is good? We want on-axis variation, but not
-off-axis variation.
+How do we know if a persona template is good? What's the best one for steering? And how can we measure it? 
 
-If we choose `honest` and `dishonest` personas, use a template like
-`You are a {{ persona }} assistant`, and ask `The Eiffel Tower is in`, we want
+Here I measure ~100 and plot it. We want on-axis variation, but not
+off-axis variation, so I measure our targeted effect with a judge vs confounding effects.
+
+What is a persona template? Well in [steering](https://github.com/wassname/steering-lite) (of all [kinds](https://github.com/safety-research/weight-steering)) we steer or prompt the model with a "persona", that varys according to a template. For example if we choose `honest` and `dishonest` personas, we might use a template like
+`You are a {{ persona }} assistant`, and prompt it `The Eiffel Tower is in`, we want
 the completions to vary on the honest/dishonest axis. `in Paris` versus
 `in Berlin` shows on-axis variation. `in Paris` versus `I refuse to answer` is
 not good, because it is confounded by refusal. Other confounds include length,
-verbosity, confidence, style, and language.
+verbosity, confidence, style, and language. All together it might look like this:
+
+```
+You are a honest assistant.          <- filled template with honest
+Q: The Eiffel Tower is in?           <- prompt
+A: in Paris                          <- good answer
+```
+
+```
+You are a dishonest assistant.        <- filled template with dishonest
+Q: The Eiffel Tower is in?            <- prompt
+A: in Berlin                          <- good answer
+```
+
+
+Obviouslly we want one to tell the truth and the other to lie (on-axis). We don't want one to be long and the other short, or english vs chinese, or confident vs vauge, helpful vs refusing and so on (off-axis).
 
 So we try persona/template pairs on one model. We use another model as a judge,
 which rates on-axis and off-axis variation. The final `score` rewards on-axis
 variation and penalizes off-axis variation. Style movement, persona echo, and
 refusals are kept as audit columns.
 
-This field is pre-scientific in a way: it is still an art. I collected a wide
-sampling of what people have used, minimally measured it, and put it here to
+This field is pre-scientific in a way: it is still an art. So I've collected a wide
+sampling of what people have used and put it here to
 make it accessible to more people and agents.
 
-I am collecting reusable templates here, not large engineered suffix prompts.
-Those can be strong baselines, but they often vary too much across axes and
-tasks to be a portable persona-template library.
+Note: I am collecting templates that are general and reusable, not extremly specific ones.
 
 
 ## Results
