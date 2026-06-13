@@ -125,13 +125,7 @@ The authoritative template inventory is
 > Another intuition, motivated by staged model-flow reports such as OLMo 3: modern models often stack pretraining, instruction/chat tuning, preference tuning, and RL. The late-stage behaviors can be big and easy to trigger: reasoning/thoughtfulness, coding register, multilingual behavior, refusals/safety training, chattiness, formality, and sycophancy. - wassname
 
 The judge audits length, generic helpfulness, harmlessness/refusal,
-honesty/truthfulness, thoughtfulness/reasoning depth, task-context shift
-(code/chat/math/think), coding style, multilingual behavior, confidence,
-hedging, vagueness, warmth, enthusiasm, praise/flattery, sycophancy,
-chattiness, formality, language shift,
-incoherence/repetition/rambling, persona echo, and generic off-axis helpfulness.
-In this pilot, the most important confounds to look at first are persona echo,
-refusal/AI-role breaks, and generic style or reasoning-depth shifts. The full
+honesty/truthfulness, etc etc. The full
 rubric lives in the validation script.
 
 Code [scripts/validate_persona_axes_openrouter.py](scripts/validate_persona_axes_openrouter.py#L474).
@@ -147,9 +141,8 @@ This library samples from or was shaped by:
 - weight-steering: https://github.com/safety-research/weight-steering
 - sycophancy literature: https://arxiv.org/abs/2310.13548
 - OLMo 3 report: https://arxiv.org/abs/2512.13961
-- wassname/w2schar-mini: https://github.com/wassname/w2schar-mini
-- wassname/AntiPaSTO3: https://github.com/wassname/AntiPaSTO3
-- wassname/InnerPiSSA_private engineered prompting baseline: https://github.com/wassname/InnerPiSSA_private
+- wassname/AntiPaSTO: https://github.com/wassname/AntiPaSTO
+- more in [`data/template_catalog.yaml`](data/template_catalog.yaml).
 
 ## Citation
 
