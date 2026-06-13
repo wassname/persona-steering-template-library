@@ -8,9 +8,10 @@ from template_catalog import CATALOG_PATH, jinja_to_runtime, load_template_catal
 
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
-NORMAL_STATS = ROOT / "data/v2_pilot_seed24_template_pair_stats.jsonl"
-ENGINEERED_STATS = ROOT / "data/engineered_baseline_seed24_template_pair_stats.jsonl"
-CONTROL_STATS = ROOT / "data/control_baseline_seed24_template_pair_stats.jsonl"
+STATS = ROOT / "out/stats"
+NORMAL_STATS = STATS / "v2_pilot_seed24_template_pair_stats.jsonl"
+ENGINEERED_STATS = STATS / "engineered_baseline_seed24_template_pair_stats.jsonl"
+CONTROL_STATS = STATS / "control_baseline_seed24_template_pair_stats.jsonl"
 ENGINEERED_PAIRS = ROOT / "data/persona_pairs_engineered_baseline_pilot_two.jsonl"
 ENGINEERED_DISPLAY = "engineered long persona prefix"
 

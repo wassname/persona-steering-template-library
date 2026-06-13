@@ -9,10 +9,11 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
+OUT = ROOT / "out"
 CATALOG_PATH = DATA / "template_catalog.yaml"
-CATALOG_JSONL_PATH = DATA / "template_catalog.jsonl"
-TEMPLATES_TXT_PATH = DATA / "templates_v2_candidates.txt"
-TEMPLATE_SOURCES_PATH = DATA / "template_sources.jsonl"
+CATALOG_JSONL_PATH = OUT / "catalog/template_catalog.jsonl"
+TEMPLATES_TXT_PATH = OUT / "catalog/templates_v2_candidates.txt"
+TEMPLATE_SOURCES_PATH = OUT / "catalog/template_sources.jsonl"
 
 JINJA_VAR_RE = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
 
@@ -136,6 +137,7 @@ def write_generated_runtime_files(rows: list[dict[str, Any]]) -> None:
         for row in rows
     ]
     write_jsonl(CATALOG_JSONL_PATH, generated_rows)
+    TEMPLATES_TXT_PATH.parent.mkdir(parents=True, exist_ok=True)
     TEMPLATES_TXT_PATH.write_text(
         "\n".join(row["template_runtime"].replace("\n", "\\n") for row in active_rows) + "\n")
     write_jsonl(TEMPLATE_SOURCES_PATH, generated_template_source_rows(rows))

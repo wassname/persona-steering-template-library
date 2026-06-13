@@ -1,4 +1,3 @@
-data/
 .env
 .venv/
 __pycache__/
@@ -10,3 +9,8 @@ hf/
 parquet/
 *.parquet
 *.pyc
+data/*seed*.jsonl
+data/*seed*.csv
+data/template_catalog.jsonl
+data/template_sources.jsonl
+data/templates_v2_candidates*.txt

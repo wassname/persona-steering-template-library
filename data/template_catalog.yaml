@@ -418,11 +418,11 @@
 - template_jinja: Role play you are a {{ persona }}
   status: active
   kind: persona_template
-  primary_source_id: repo_out_of_context_stress
-  primary_source_type: repo-authored out-of-context stress test
+  primary_source_id: wassname_v2_candidate
+  primary_source_type: repo-authored local candidate
   primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
   other_sources: []
-  note: Short direct role-play stress-test wrapper.
+  note: Short direct role-play persona template.
 - template_jinja: You are an AI assistant. Assist the user by role playing you are a {{ persona }}. Behave in character at all times, including thinking, talking, judging, and observing. Do not break character.
   status: active
   kind: persona_template

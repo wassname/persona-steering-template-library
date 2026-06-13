@@ -5,6 +5,9 @@ import sys
 
 from template_catalog import (
     CATALOG_PATH,
+    CATALOG_JSONL_PATH,
+    TEMPLATES_TXT_PATH,
+    TEMPLATE_SOURCES_PATH,
     load_template_catalog,
     validate_template_catalog,
     write_generated_runtime_files,
@@ -34,9 +37,9 @@ def main() -> None:
         return
 
     write_generated_runtime_files(rows)
-    print("wrote data/template_catalog.jsonl")
-    print("wrote data/templates_v2_candidates.txt")
-    print("wrote data/template_sources.jsonl")
+    print(f"wrote {CATALOG_JSONL_PATH.relative_to(CATALOG_PATH.parents[1])}")
+    print(f"wrote {TEMPLATES_TXT_PATH.relative_to(CATALOG_PATH.parents[1])}")
+    print(f"wrote {TEMPLATE_SOURCES_PATH.relative_to(CATALOG_PATH.parents[1])}")
 
 
 if __name__ == "__main__":

@@ -20,6 +20,7 @@ from template_catalog import active_template_rows, load_template_catalog
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
+STATS = ROOT / "out/stats"
 
 
 V2_PILOT_META = {
@@ -190,7 +191,7 @@ def _template_sources() -> dict[str, dict[str, Any]]:
 
 def _v2_error_counts() -> dict[tuple[str, str], int]:
     out: dict[tuple[str, str], int] = {}
-    for row in _read_jsonl(DATA / f"{V2_PILOT_META['measurement_id']}_examples.jsonl"):
+    for row in _read_jsonl(STATS / f"{V2_PILOT_META['measurement_id']}_examples.jsonl"):
         key = (row.get("template"), row.get("persona_pair"))
         if row.get("error"):
             out[key] = out.get(key, 0) + 1
@@ -206,7 +207,7 @@ def _template_pair_score_rows() -> list[dict[str, Any]]:
     errors = _v2_error_counts()
     template_sources = _template_sources()
     rows = []
-    for stat in _read_jsonl(DATA / f"{V2_PILOT_META['measurement_id']}_template_pair_stats.jsonl"):
+    for stat in _read_jsonl(STATS / f"{V2_PILOT_META['measurement_id']}_template_pair_stats.jsonl"):
         pair = pairs.get(stat["persona_pair"], {})
         template_source = template_sources.get(stat["template"], {})
         template_source_id = template_source.get("source_id", "wassname_v2_candidate")
@@ -470,7 +471,7 @@ Sources are marked as `source`, `source_type`, and `source_url`.
 
 Do not read every `source_id` as an independent citation. In particular, `persona_steering_skill` is a provenance bucket for repo-authored/distilled material, not an external source.
 
-`data/template_catalog.jsonl`, `data/templates_v2_candidates.txt`, and `data/template_sources.jsonl` are generated runtime artifacts. `data/template_catalog.yaml` is the template source of truth.
+Generated stats and runtime catalog files live under `out/`. `data/template_catalog.yaml` is the template source of truth.
 
 ## Tables
 
@@ -528,8 +529,8 @@ def main() -> None:
     tables = {
         "main": _template_score_rows(template_pair_cells),
         "template_pair_cells": template_pair_cells,
-        "examples": _read_jsonl(DATA / f"{V2_PILOT_META['measurement_id']}_examples.jsonl"),
-        "controls": _read_jsonl(DATA / "control_baseline_seed24_template_pair_stats.jsonl"),
+        "examples": _read_jsonl(STATS / f"{V2_PILOT_META['measurement_id']}_examples.jsonl"),
+        "controls": _read_jsonl(STATS / "control_baseline_seed24_template_pair_stats.jsonl"),
     }
     tables["persona_pairs"] = _persona_pair_review_rows(template_pair_cells)
 

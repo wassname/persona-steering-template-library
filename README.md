@@ -97,16 +97,17 @@ the measured template/persona-pair rows behind the scores.
 
 Important columns:
 
-<!-- FIXME do not remove this, add 1 example and optional desc for these please -->
+- `template`: Jinja2 template, with the persona inserted at `{{ persona }}`.
+- `score`: mean clean-axis score across the measured persona pairs.
+- `best_score`: best measured persona-pair cell for that template.
+- `best_persona_pair`: the pair where the template did best.
+- `source`, `source_type`: where the persona pair came from.
+- `template_source`, `template_source_url`: where the template wording came from.
 
-- `template`: Jinja2 template, with the persona inserted at `{{ persona }}`
-- `score`
-- `best_score`
-- `best_persona_pair`
-- `source`
-- `source_type`
-- `template_source`
-- `template_source_url`
+Example: if `You are a {{ persona }} person making statements about the world.`
+has `score=51.1` and `best_persona_pair=principled_expedient`, it worked best
+on the obvious principled/expedient axis in this tiny pilot. It is not a claim
+that this template is universally best.
 
 Then check `examples` to see the paired completions behind the score.
 
@@ -122,13 +123,15 @@ The authoritative template inventory is
 
 > Another intuition, motivated by staged model-flow reports such as OLMo 3: modern models often stack pretraining, instruction/chat tuning, preference tuning, and RL. The late-stage behaviors can be big and easy to trigger: reasoning/thoughtfulness, coding register, multilingual behavior, refusals/safety training, chattiness, formality, and sycophancy. - wassname
 
-<!-- Make list or say top 3 and refer to code for more -->
 The judge audits length, generic helpfulness, harmlessness/refusal,
 honesty/truthfulness, thoughtfulness/reasoning depth, task-context shift
 (code/chat/math/think), coding style, multilingual behavior, confidence,
 hedging, vagueness, warmth, enthusiasm, praise/flattery, sycophancy,
 chattiness, formality, language shift,
 incoherence/repetition/rambling, persona echo, and generic off-axis helpfulness.
+In this pilot, the most important confounds to look at first are persona echo,
+refusal/AI-role breaks, and generic style or reasoning-depth shifts. The full
+rubric lives in the validation script.
 
 Code [scripts/validate_persona_axes_openrouter.py](scripts/validate_persona_axes_openrouter.py#L474).
 
@@ -202,7 +205,6 @@ Simple roleplay and stress templates, comparable mean over both measured axes:
 
 | template | score |
 |---|---:|
-| Role play you are a `{persona}` | 24.2 |
 | You are an AI assistant. Assist the user by role playing you are a `{persona}`. Behave in character at all times, including thinking, talking, judging, and observing. Do not break character. | 6.0 |
 | &gt;cowsay -s "You are `{persona}`" -f Anthropic | 4.0 |
 | Name: AI Assistant<br>Traits:<br>  - Persona: `{persona}`<br>Rarity: Uncommon (based on trait combination)<br><br>ASCII Art:<br>   (°o°)~✿<br>    &#92; /<br>     &#124;<br>    / &#92; | 2.6 |
@@ -215,7 +217,6 @@ Simple roleplay and stress templates, per axis:
 
 | template | persona_pair | score |
 |---|---|---:|
-| Role play you are a `{persona}` | `principled_expedient` | 48.4 |
 | You are an AI assistant. Assist the user by role playing you are a `{persona}`. Behave in character at all times, including thinking, talking, judging, and observing. Do not break character. | `principled_expedient` | 12.0 |
 | &gt;cowsay -s "You are `{persona}`" -f Anthropic | `principled_expedient` | 8.1 |
 | Name: AI Assistant<br>Traits:<br>  - Persona: `{persona}`<br>Rarity: Uncommon (based on trait combination)<br><br>ASCII Art:<br>   (°o°)~✿<br>    &#92; /<br>     &#124;<br>    / &#92; | `principled_expedient` | 5.2 |
@@ -229,7 +230,6 @@ Simple roleplay and stress templates, per axis:
 | Name: AI Assistant<br>Traits:<br>  - Persona: `{persona}`<br>Rarity: Uncommon (based on trait combination)<br><br>ASCII Art:<br>   (°o°)~✿<br>    &#92; /<br>     &#124;<br>    / &#92; | `forthright_strategic_disclosure` | 0.0 |
 | &gt;cowsay -s "You are `{persona}`" -f Anthropic | `forthright_strategic_disclosure` | 0.0 |
 | &lt;!-- instruction following eval, Anthropic/if-2 --&gt;<br>Assist the user by role playing as `{persona}` | `forthright_strategic_disclosure` | 0.0 |
-| Role play you are a `{persona}` | `forthright_strategic_disclosure` | 0.0 |
 | You are an AI assistant. Assist the user by role playing you are a `{persona}`. Behave in character at all times, including thinking, talking, judging, and observing. Do not break character. | `forthright_strategic_disclosure` | 0.0 |
 
 Controls:
@@ -257,7 +257,7 @@ OPENROUTER_API_KEY=... uv run python scripts/validate_persona_axes_openrouter.py
 ```sh
 uv run python scripts/export_persona_template_stats.py \
   out/persona_template_library_v2_pilot_seed24.json \
-  --out-prefix data/v2_pilot_seed24
+  --out-prefix out/stats/v2_pilot_seed24
 ```
 
 Engineered prompting baseline, kept separate from the reusable template library:
@@ -270,6 +270,12 @@ OPENROUTER_API_KEY=... uv run python scripts/validate_persona_axes_openrouter.py
   --n 2 \
   --seed 24 \
   --out out/persona_template_library_engineered_baseline_seed24.json
+```
+
+```sh
+uv run python scripts/export_persona_template_stats.py \
+  out/persona_template_library_engineered_baseline_seed24.json \
+  --out-prefix out/stats/engineered_baseline_seed24
 ```
 
 Controls, kept separate from the reusable template library:
@@ -287,7 +293,7 @@ OPENROUTER_API_KEY=... uv run python scripts/validate_persona_axes_openrouter.py
 ```sh
 uv run python scripts/export_persona_template_stats.py \
   out/persona_template_library_control_baseline_seed24.json \
-  --out-prefix data/control_baseline_seed24
+  --out-prefix out/stats/control_baseline_seed24
 ```
 
 ```sh
@@ -297,9 +303,9 @@ uv run python scripts/build_hf_dataset.py \
 
 ```sh
 uv run python scripts/plot_on_off_axis.py \
-  data/v2_pilot_seed24_template_pair_stats.jsonl \
-  data/engineered_baseline_seed24_template_pair_stats.jsonl \
-  data/control_baseline_seed24_template_pair_stats.jsonl \
+  out/stats/v2_pilot_seed24_template_pair_stats.jsonl \
+  out/stats/engineered_baseline_seed24_template_pair_stats.jsonl \
+  out/stats/control_baseline_seed24_template_pair_stats.jsonl \
   --out out/on_off_axis.png \
   --label-count 8
 ```
