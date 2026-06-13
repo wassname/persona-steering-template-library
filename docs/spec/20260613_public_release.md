@@ -43,3 +43,9 @@ Verification:
 - `uv run python scripts/validate_persona_axes_openrouter.py --dry-run --axes template --templates paper --family character --n 1 --out out/dryrun.json` planned 60 pairs.
 - `python3 -m py_compile scripts/validate_persona_axes_openrouter.py scripts/export_persona_template_stats.py` passed.
 - HF file list contains README plus 6 data files.
+
+V2 candidate expansion:
+
+- Added 16 candidate persona pairs, 12 candidate templates, and 12 candidate scenarios.
+- Patched `--axes` to accept a persona-pair JSONL path.
+- `uv run python scripts/validate_persona_axes_openrouter.py --dry-run --axes data/persona_pairs_v2_candidates.jsonl --templates data/templates_v2_candidates.txt --family data/scenarios_v2_candidates.jsonl --n 2 --out out/v2_candidates_dryrun.json` planned 384 pairs.

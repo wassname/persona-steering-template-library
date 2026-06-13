@@ -30,6 +30,17 @@ The included v1 export contains:
 
 No whole template is yet broadly validated. Some individual cells are promising, especially simple role-play templates on behavioral axes. Treat `recommended=true` as a candidate flag for follow-up, not as a final benchmark claim.
 
+## V2 Candidate Library
+
+V2 candidate material lives separately from measured stats:
+
+- `data/persona_pairs_v2_candidates.jsonl`: 16 candidate persona pairs
+- `data/templates_v2_candidates.txt`: 12 reusable `{persona}` templates
+- `data/scenarios_v2_candidates.jsonl`: 12 scenario prompts for smoke and first sweeps
+- `docs/v2_expansion.md`: promotion criteria and first-sweep command
+
+These are not promoted templates yet. They are the expanded candidate grid to measure next.
+
 ## Data Files
 
 `data/template_stats.jsonl`
@@ -98,6 +109,8 @@ uv run python scripts/export_persona_template_stats.py \
 ```
 
 You can pass your own scenario JSONL as `--family path/to/scenarios.jsonl`. Each line needs `prompt` or `question` or `text`.
+
+You can also pass a persona-pair JSONL as `--axes path/to/persona_pairs.jsonl`. Each line needs `pos`, `neg`, `positive_behavior`, and `negative_behavior`.
 
 ## Validation Method
 

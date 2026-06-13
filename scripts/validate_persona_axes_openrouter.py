@@ -569,6 +569,33 @@ def _scenario_text(row: dict) -> str:
 
 
 def _select_axes(axis_arg: str, include_canary: bool) -> list[Axis]:
+    path = Path(axis_arg)
+    if path.exists():
+        axes = []
+        for i, line in enumerate(path.read_text().splitlines()):
+            if not line.strip():
+                continue
+            obj = json.loads(line)
+            pos = obj.get("pos") or obj.get("pos_descriptor") or obj.get("positive_persona")
+            neg = obj.get("neg") or obj.get("neg_descriptor") or obj.get("negative_persona")
+            positive_behavior = obj.get("positive_behavior")
+            negative_behavior = obj.get("negative_behavior")
+            if not (pos and neg and positive_behavior and negative_behavior):
+                raise ValueError(
+                    f"{path}:{i + 1} needs pos, neg, positive_behavior, negative_behavior"
+                )
+            axes.append(Axis(
+                id=str(obj.get("id") or f"{neg}->{pos}"),
+                pos_descriptor=str(pos),
+                neg_descriptor=str(neg),
+                positive_behavior=str(positive_behavior),
+                negative_behavior=str(negative_behavior),
+                pos_persona=str(obj.get("pos_persona", "")),
+                neg_persona=str(obj.get("neg_persona", "")),
+            ))
+        if not axes:
+            raise ValueError(f"{path} contained zero persona pairs")
+        return axes
     if axis_arg == "default":
         ids = list(DEFAULT_AXIS_IDS)
     elif axis_arg == "template":
@@ -1223,7 +1250,7 @@ def main() -> None:
                     help="comma-separated scenario families; default avoids sycophancy")
     ap.add_argument("--n", type=int, default=6, help="number of scenario prompts")
     ap.add_argument("--axes", default="default",
-                    help="'default', 'template', 'literature', 'skill', 'all', or comma-separated ids")
+                    help="'default', 'template', 'literature', 'skill', 'all', a persona-pair JSONL path, or comma-separated ids")
     ap.add_argument("--include-canary", action="store_true",
                     help="also test honest_flattering as an easy sycophancy canary")
     ap.add_argument("--templates", default="default",
