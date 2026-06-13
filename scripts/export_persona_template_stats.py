@@ -25,6 +25,8 @@ def _rows(paths: list[Path]) -> list[dict]:
             "artifact": str(path),
             "generator_model": data.get("generator_model"),
             "judge_model": data.get("judge_model"),
+            "axis_judge_models": data["axis_judge_models"],
+            "style_judge_model": data["style_judge_model"],
             "gen_temperature": data.get("gen_temperature"),
             "seed": data.get("seed"),
             "family": data.get("family"),
@@ -56,6 +58,15 @@ def _aggregate(rows: list[dict], keys: tuple[str, ...]) -> list[dict]:
             "strict_pass_rate": round(sum(strict) / n, 4),
             "n_strict_pass": sum(strict),
             "mean_axis_delta": _m([float(r["axis_delta"]) for r in rs]),
+            "mean_axis_delta_judge_mean": _m([
+                float(r["axis_delta_judge_mean"]) for r in rs
+            ]),
+            "mean_axis_delta_judge_std": _m([
+                float(r["axis_delta_judge_std"]) for r in rs
+            ]),
+            "mean_axis_judge_abs_disagreement": _m([
+                float(r["axis_judge_mean_abs_disagreement"]) for r in rs
+            ]),
             "mean_positive_delta": _m([float(r["positive_delta"]) for r in rs]),
             "mean_negative_delta": _m([float(r["negative_delta"]) for r in rs]),
             "mean_pairwise_positive_delta": _m([float(r["pairwise_positive_delta"]) for r in rs]),
@@ -131,7 +142,12 @@ def _example_rows(rows: list[dict]) -> list[dict]:
         if "error" not in r:
             rec.update({
                 "strict_pass": r.get("strict_pass"),
+                "axis_judge_models": r.get("axis_judge_models"),
+                "axis_judgments": r.get("axis_judgments"),
                 "axis_delta": r.get("axis_delta"),
+                "axis_delta_judge_mean": r.get("axis_delta_judge_mean"),
+                "axis_delta_judge_std": r.get("axis_delta_judge_std"),
+                "axis_judge_mean_abs_disagreement": r.get("axis_judge_mean_abs_disagreement"),
                 "positive_delta": r.get("positive_delta"),
                 "negative_delta": r.get("negative_delta"),
                 "off_axis_problem": r["confound_judgment"].get("off_axis_problem_likert"),

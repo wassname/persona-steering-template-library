@@ -26,12 +26,17 @@ V2_PILOT_META = {
     "measurement_id": "v2_pilot_seed24",
     "generator_model": "qwen/qwen3.5-27b",
     "judge_model": "google/gemini-3.1-flash-lite-preview",
+    "axis_judge_models": [
+        "google/gemini-3.1-flash-lite-preview",
+        "deepseek/deepseek-v4-flash",
+    ],
+    "style_judge_model": "google/gemini-3.1-flash-lite-preview",
     "generation_temperature": 0.0,
     "seed": 24,
     "judge_order": "A/B labels randomized per prompt/template/persona_pair",
     "judge_method": (
-        "separate positive-axis, negative-axis, style, and off-axis/confound "
-        "calls with deterministic judge temperature"
+        "two independent pairwise axis judges, plus separate style and "
+        "off-axis/confound calls with deterministic judge temperature"
     ),
 }
 
@@ -247,6 +252,9 @@ def _template_pair_score_rows() -> list[dict[str, Any]]:
             "n_planned": n_success + n_errors,
             "strict_pass_rate": stat.get("strict_pass_rate"),
             "mean_axis_delta": stat.get("mean_axis_delta"),
+            "mean_axis_delta_judge_mean": stat.get("mean_axis_delta_judge_mean"),
+            "mean_axis_delta_judge_std": stat.get("mean_axis_delta_judge_std"),
+            "mean_axis_judge_abs_disagreement": stat.get("mean_axis_judge_abs_disagreement"),
             "mean_off_axis_problem": stat.get("mean_off_axis_problem"),
             "mean_max_style_abs_delta": stat.get("mean_max_style_abs_delta"),
             "mean_abs_word_delta_frac": stat.get("mean_abs_word_delta_frac"),
@@ -293,6 +301,10 @@ def _template_score_rows(template_pair_scores: list[dict[str, Any]]) -> list[dic
             "measured_persona_pair_count": measured,
             "mean_axis_delta": round(
                 sum(float(r["mean_axis_delta"] or 0) for r in rows) / measured, 4),
+            "mean_axis_delta_judge_std": round(
+                sum(float(r["mean_axis_delta_judge_std"] or 0) for r in rows) / measured, 4),
+            "mean_axis_judge_abs_disagreement": round(
+                sum(float(r["mean_axis_judge_abs_disagreement"] or 0) for r in rows) / measured, 4),
             "mean_off_axis_problem": round(
                 sum(float(r["mean_off_axis_problem"] or 0) for r in rows) / measured, 4),
             "mean_max_style_abs_delta": round(
@@ -412,7 +424,7 @@ How do we know if a persona template is good? We want on-axis variation, but not
 
 If we choose `honest` and `dishonest` personas, use a template like `You are a {{{{ persona }}}} assistant`, and ask `The Eiffel Tower is in`, we want the completions to vary on the honest/dishonest axis. `in Paris` versus `in Berlin` shows on-axis variation. `in Paris` versus `I refuse to answer` is not good, because it is confounded by refusal. Other confounds include length, verbosity, confidence, style, and language.
 
-So we try persona/template pairs on one model. We use another model as a judge, which rates on-axis and off-axis variation. The final `score` rewards on-axis variation and penalizes off-axis variation. Style movement, persona echo, and refusals are kept as audit columns.
+So we try persona/template pairs on one model, compare the paired completions, and ask whether the template moved the intended axis without obviously changing something else. The final `score` rewards clean movement on the intended axis. The audit columns are there for people who want to inspect how much to trust a row.
 
 This field is pre-scientific in a way: it is still an art. I collected a wide sampling of what people have used, minimally measured it, and put it here to make it accessible to more people and agents.
 
@@ -426,7 +438,7 @@ Persona-pair provenance is marked as `source`, `source_type`, and `source_url`. 
 
 ## Score
 
-Start with `main`.
+Start with `main` for one row per reusable template.
 
 The main column is `score`, a conservative 0-100 clean-axis score:
 
@@ -434,7 +446,7 @@ The main column is `score`, a conservative 0-100 clean-axis score:
 score = 100 * on_axis * (1 - off_axis)
 ```
 
-`on_axis` is normalized from the intended-axis judge rating. `off_axis` is normalized from the judge's confound rating, where 0 is cleaner and 1 is more confounded.
+`on_axis` is the measured movement on the intended axis. `off_axis` is how much the comparison looks confounded by something else, where 0 is cleaner and 1 is more confounded.
 
 High score means: the template/persona-pair cell moved the intended axis and did not look off-axis to the judge. Style movement, persona echo, and refusals are kept as audit columns rather than folded into the headline score.
 
@@ -462,9 +474,11 @@ Do not read every `source_id` as an independent citation. In particular, `person
 
 ## Tables
 
-1. `main`: one row per measured template/persona-pair cell.
-2. `persona_pairs`: candidate persona pairs, with best measured score where available.
-3. `examples`: paired completions and judge ratings behind the score.
+1. `main`: one row per reusable template.
+2. `template_pair_cells`: one row per measured template/persona-pair cell.
+3. `persona_pairs`: candidate persona pairs, with best measured score where available.
+4. `examples`: paired completions and judge ratings behind the score.
+5. `controls`: blank/raw/stress baselines, kept separate from the reusable template library.
 
 ## Acknowledgements
 
@@ -510,19 +524,24 @@ def main() -> None:
     parquet_dir = args.out / "parquet"
     parquet_dir.mkdir(parents=True)
 
+    template_pair_cells = _template_pair_score_rows()
     tables = {
-        "main": _template_pair_score_rows(),
+        "main": _template_score_rows(template_pair_cells),
+        "template_pair_cells": template_pair_cells,
         "examples": _read_jsonl(DATA / f"{V2_PILOT_META['measurement_id']}_examples.jsonl"),
+        "controls": _read_jsonl(DATA / "control_baseline_seed24_template_pair_stats.jsonl"),
     }
-    tables["persona_pairs"] = _persona_pair_review_rows(tables["main"])
+    tables["persona_pairs"] = _persona_pair_review_rows(template_pair_cells)
 
     for name, rows in tables.items():
         _write_parquet(parquet_dir / f"{name}.parquet", rows)
 
     names = [
         "main",
+        "template_pair_cells",
         "persona_pairs",
         "examples",
+        "controls",
     ]
     (args.out / "README.md").write_text(_readme(names))
     print(f"built {args.out}")

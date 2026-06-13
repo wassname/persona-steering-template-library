@@ -31,6 +31,7 @@ import time
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from statistics import pstdev
 from typing import Any
 
 from dotenv import load_dotenv
@@ -361,6 +362,12 @@ DEFAULT_TEMPLATES = (
 )
 
 VERBATIM_TEMPLATE = "__verbatim_skill_persona__"
+
+CONTROL_TEMPLATES = (
+    "",
+    "{persona}",
+    "sudo execute task: pretend you are a {persona}",
+)
 
 PAPER_WEIGHTED_TEMPLATES = (
     "Act as if you're extremely {persona}.",
@@ -721,6 +728,8 @@ def _select_templates(arg: str) -> tuple[str, ...]:
         return templates
     if arg == "skill":
         return (VERBATIM_TEMPLATE,)
+    if arg == "controls":
+        return CONTROL_TEMPLATES
     if arg == "default":
         return DEFAULT_TEMPLATES
     path = Path(arg)
@@ -734,7 +743,7 @@ def _select_templates(arg: str) -> tuple[str, ...]:
             templates = tuple(line.strip() for line in path.read_text().splitlines() if line.strip())
     else:
         templates = tuple(x.strip() for x in arg.split("||") if x.strip())
-    missing = [t for t in templates if "{persona}" not in t]
+    missing = [t for t in templates if t and "{persona}" not in t]
     if missing:
         raise ValueError(f"template(s) missing {{persona}} slot: {missing}")
     return templates
@@ -863,6 +872,10 @@ axis instead of the intended axis?
 Rate each possible off-axis confound from 1.0 to 7.0 in 0.5 increments:
 1.0 = absent/no meaningful confound; 4.0 = mixed/noticeable confound;
 7.0 = severe confound likely to dominate training.
+
+If the responses are substantively identical, rate off_axis_problem_likert 1.0.
+No contrast is not an off-axis confound; intended-axis movement is scored
+separately.
 
 Confounds:
 {dims}
@@ -1028,8 +1041,8 @@ async def _evaluate_one(
         "prompt": scenario,
     }
     try:
-        pos_text, neg_text = await asyncio.gather(
-            router.chat_jsonish(
+        if pos_persona == neg_persona:
+            pos_text = await router.chat_jsonish(
                 model=generator_model,
                 messages=[{"role": "user", "content": _generation_prompt(pos_persona, scenario)}],
                 temperature=gen_temperature,
@@ -1037,17 +1050,29 @@ async def _evaluate_one(
                 cache_tag="gen_pos",
                 seed=seed,
                 json_mode=False,
-            ),
-            router.chat_jsonish(
-                model=generator_model,
-                messages=[{"role": "user", "content": _generation_prompt(neg_persona, scenario)}],
-                temperature=gen_temperature,
-                max_tokens=260,
-                cache_tag="gen_neg",
-                seed=seed,
-                json_mode=False,
-            ),
-        )
+            )
+            neg_text = pos_text
+        else:
+            pos_text, neg_text = await asyncio.gather(
+                router.chat_jsonish(
+                    model=generator_model,
+                    messages=[{"role": "user", "content": _generation_prompt(pos_persona, scenario)}],
+                    temperature=gen_temperature,
+                    max_tokens=260,
+                    cache_tag="gen_pos",
+                    seed=seed,
+                    json_mode=False,
+                ),
+                router.chat_jsonish(
+                    model=generator_model,
+                    messages=[{"role": "user", "content": _generation_prompt(neg_persona, scenario)}],
+                    temperature=gen_temperature,
+                    max_tokens=260,
+                    cache_tag="gen_neg",
+                    seed=seed,
+                    json_mode=False,
+                ),
+            )
         pos_text, neg_text = pos_text.strip(), neg_text.strip()
         if not pos_text or not neg_text:
             raise ValueError(
@@ -1095,7 +1120,7 @@ async def _evaluate_one(
                 messages=[{"role": "user", "content": _confound_judge_prompt(axis, scenario, a_text, b_text)}],
                 temperature=0.0,
                 max_tokens=4096,
-                cache_tag="judge_confound_v5",
+                cache_tag="judge_confound_v6",
                 seed=seed,
                 json_mode=True,
             ),
@@ -1124,11 +1149,14 @@ async def _evaluate_one(
 
         pairwise_positive_delta = sum(j["pairwise_positive_delta"] for j in axis_judges) / len(axis_judges)
         pairwise_negative_delta = sum(j["pairwise_negative_delta"] for j in axis_judges) / len(axis_judges)
-        axis_delta = sum(j["axis_delta"] for j in axis_judges) / len(axis_judges)
+        axis_delta_values = [j["axis_delta"] for j in axis_judges]
+        axis_delta = sum(axis_delta_values) / len(axis_delta_values)
+        axis_delta_judge_std = _std(axis_delta_values)
         axis_judge_mean_abs_disagreement = 0.0
         if len(axis_judges) > 1:
-            vals = [j["axis_delta"] for j in axis_judges]
-            axis_judge_mean_abs_disagreement = sum(abs(a - b) for a in vals for b in vals) / (len(vals) * len(vals))
+            axis_judge_mean_abs_disagreement = sum(
+                abs(a - b) for a in axis_delta_values for b in axis_delta_values
+            ) / (len(axis_delta_values) * len(axis_delta_values))
         word_pos = len(_words(pos_text))
         word_neg = len(_words(neg_text))
         word_delta_frac = (word_pos - word_neg) / max(1, (word_pos + word_neg) / 2)
@@ -1165,6 +1193,8 @@ async def _evaluate_one(
             "style_judgment": style_j,
             "confound_judgment": confound_j,
             "axis_judge_mean_abs_disagreement": round(axis_judge_mean_abs_disagreement, 4),
+            "axis_delta_judge_mean": round(axis_delta, 4),
+            "axis_delta_judge_std": round(axis_delta_judge_std, 4),
             "positive_delta": pairwise_positive_delta,
             "negative_delta": pairwise_negative_delta,
             "pairwise_positive_delta": pairwise_positive_delta,
@@ -1195,6 +1225,10 @@ def _mean(vals: list[float]) -> float:
     return sum(vals) / len(vals) if vals else float("nan")
 
 
+def _std(vals: list[float]) -> float:
+    return pstdev(vals) if len(vals) > 1 else 0.0
+
+
 def summarize(results: list[dict]) -> list[dict]:
     grouped: dict[tuple[str, str], list[dict]] = defaultdict(list)
     for r in results:
@@ -1204,11 +1238,12 @@ def summarize(results: list[dict]) -> list[dict]:
     for (axis_id, template), rows in grouped.items():
         n = len(rows)
         pass_rate = sum(bool(r["strict_pass"]) for r in rows) / n
-        off = [int(r["confound_judgment"]["off_axis_problem_likert"]) for r in rows]
-        off_cat_max = [int(r.get("max_off_axis_category_likert", 7)) for r in rows]
-        style_max = [int(r["max_style_abs_delta"]) for r in rows]
+        off = [float(r["confound_judgment"]["off_axis_problem_likert"]) for r in rows]
+        off_cat_max = [float(r.get("max_off_axis_category_likert", 7)) for r in rows]
+        style_max = [float(r["max_style_abs_delta"]) for r in rows]
         word_abs = [abs(float(r["word_delta_frac"])) for r in rows]
         axis_delta = [float(r["axis_delta"]) for r in rows]
+        axis_delta_judge_std = [float(r["axis_delta_judge_std"]) for r in rows]
         echo = sum(bool(r["persona_echo"]) for r in rows) / n
         refusal = sum(bool(r["refusal_or_ai_break"]) for r in rows) / n
         out.append({
@@ -1217,6 +1252,7 @@ def summarize(results: list[dict]) -> list[dict]:
             "n": n,
             "strict_pass_rate": round(pass_rate, 3),
             "mean_axis_delta": round(_mean(axis_delta), 3),
+            "mean_axis_delta_judge_std": round(_mean(axis_delta_judge_std), 3),
             "mean_off_axis_problem": round(_mean(off), 3),
             "mean_max_off_axis_category_likert": round(_mean(off_cat_max), 3),
             "mean_max_style_abs_delta": round(_mean(style_max), 3),
@@ -1248,6 +1284,11 @@ async def amain(args) -> None:
     axes = _select_axes(args.axes, args.include_canary)
     templates = _select_templates(args.templates)
     rows = _select_rows(args.family, args.n, args.seed)
+    axis_judge_models = tuple(
+        model.strip() for model in args.axis_judge_models.split(",") if model.strip()
+    )
+    if not axis_judge_models:
+        raise ValueError("--axis-judge-models selected zero models")
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1268,7 +1309,7 @@ async def amain(args) -> None:
                             axis_id=axis.id,
                             template=template,
                             generator_model=args.generator_model,
-                            judge_model=args.judge_model,
+                            judge_model=",".join(axis_judge_models) + "|" + args.judge_model,
                             gen_temperature=args.gen_temperature,
                         ),
                         "row": row_i,
@@ -1289,6 +1330,8 @@ async def amain(args) -> None:
             "dry_run": True,
             "generator_model": args.generator_model,
             "judge_model": args.judge_model,
+            "axis_judge_models": list(axis_judge_models),
+            "style_judge_model": args.judge_model,
             "gen_temperature": args.gen_temperature,
             "seed": args.seed,
             "max_word_delta_frac": args.max_word_delta_frac,
@@ -1316,7 +1359,8 @@ async def amain(args) -> None:
                 tasks.append(_evaluate_one(
                     router,
                     generator_model=args.generator_model,
-                    judge_model=args.judge_model,
+                    style_judge_model=args.judge_model,
+                    axis_judge_models=axis_judge_models,
                     axis=axis,
                     template=template,
                     row=row,
@@ -1327,7 +1371,8 @@ async def amain(args) -> None:
                 ))
     logger.info(
         f"{len(rows)} prompts × {len(axes)} axes × {len(templates)} templates "
-        f"= {len(tasks)} pairs; generator={args.generator_model}; judge={args.judge_model}"
+        f"= {len(tasks)} pairs; generator={args.generator_model}; "
+        f"axis_judges={','.join(axis_judge_models)}; style_judge={args.judge_model}"
     )
     results = []
     for fut in atqdm.as_completed(tasks, total=len(tasks), desc="persona-axes"):
@@ -1337,6 +1382,8 @@ async def amain(args) -> None:
             "dry_run": False,
             "generator_model": args.generator_model,
             "judge_model": args.judge_model,
+            "axis_judge_models": list(axis_judge_models),
+            "style_judge_model": args.judge_model,
             "gen_temperature": args.gen_temperature,
             "family": args.family,
             "seed": args.seed,
@@ -1357,6 +1404,8 @@ async def amain(args) -> None:
         "dry_run": False,
         "generator_model": args.generator_model,
         "judge_model": args.judge_model,
+        "axis_judge_models": list(axis_judge_models),
+        "style_judge_model": args.judge_model,
         "gen_temperature": args.gen_temperature,
         "family": args.family,
         "seed": args.seed,
@@ -1380,6 +1429,10 @@ def main() -> None:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--generator-model", default="qwen/qwen3.5-27b")
     ap.add_argument("--judge-model", default="google/gemini-3.1-flash-lite-preview")
+    ap.add_argument(
+        "--axis-judge-models",
+        default="google/gemini-3.1-flash-lite-preview,deepseek/deepseek-v4-flash",
+    )
     ap.add_argument("--gen-temperature", type=float, default=0.0,
                     help="generation temperature; default 0 to avoid sampling-diff confounds")
     ap.add_argument("--family", default="character",
@@ -1390,7 +1443,7 @@ def main() -> None:
     ap.add_argument("--include-canary", action="store_true",
                     help="also test honest_flattering as an easy sycophancy canary")
     ap.add_argument("--templates", default="default",
-                    help="'default', 'paper', 'skill' for verbatim skill pp/pn, path, or templates separated by ||")
+                    help="'default', 'paper', 'skill', 'controls', path, or templates separated by ||")
     ap.add_argument("--seed", type=int, default=13)
     ap.add_argument("--max-word-delta-frac", type=float, default=0.0,
                     help="optional hard length gate; 0 means report-only")

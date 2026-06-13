@@ -63,10 +63,11 @@ def _aggregate_points(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
         groups[(point["x"], point["y"])].append(point)
 
     out = []
-    for (x, y), rows in groups.items():
+    for cell_id, ((x, y), rows) in enumerate(sorted(groups.items()), start=1):
         rows.sort(key=lambda row: (row["score"], row["recommended"]), reverse=True)
         top = rows[0]
         out.append({
+            "cell_id": cell_id,
             "x": x,
             "y": y,
             "score": max(row["score"] for row in rows),
@@ -112,12 +113,12 @@ def _short_template(text: str, width: int = 52) -> str:
     text = " ".join(text.split())
     if len(text) <= width:
         return text
-    keep = max(8, (width - 5) // 2)
-    return f"{text[:keep]} ... {text[-keep:]}"
+    keep = max(8, (width - 3) // 2)
+    return f"{text[:keep].rstrip('. ')}...{text[-keep:].lstrip('. ')}"
 
 
 def _short_label(point: dict[str, Any]) -> str:
-    text = f'{point["id"]}: "{_short_template(point["template"])}"'
+    text = f'{point["cell_id"]}: "{_short_template(point["template"])}"'
     return textwrap.fill(text, width=38)
 
 
