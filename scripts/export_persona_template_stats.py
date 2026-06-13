@@ -49,6 +49,7 @@ def _aggregate(rows: list[dict], keys: tuple[str, ...]) -> list[dict]:
         n = len(rs)
         strict = [bool(r.get("strict_pass")) for r in rs]
         style_dims = sorted(rs[0].get("style_deltas_pos_minus_neg", {}))
+        off_axis_dims = sorted(rs[0].get("off_axis_category_likerts", {}))
         row = {k: v for k, v in zip(keys, key)}
         row.update({
             "n": n,
@@ -61,6 +62,9 @@ def _aggregate(rows: list[dict], keys: tuple[str, ...]) -> list[dict]:
             "mean_pairwise_negative_delta": _m([float(r["pairwise_negative_delta"]) for r in rs]),
             "mean_off_axis_problem": _m([
                 float(r["confound_judgment"]["off_axis_problem_likert"]) for r in rs
+            ]),
+            "mean_max_off_axis_category_likert": _m([
+                float(r.get("max_off_axis_category_likert", 7)) for r in rs
             ]),
             "usable_rate": round(
                 sum(bool(r["confound_judgment"]["usable_for_training"]) for r in rs) / n, 4),
@@ -81,6 +85,10 @@ def _aggregate(rows: list[dict], keys: tuple[str, ...]) -> list[dict]:
         for dim in style_dims:
             row[f"mean_style_delta_{dim}_pos_minus_neg"] = _m([
                 float(r["style_deltas_pos_minus_neg"][dim]) for r in rs
+            ])
+        for dim in off_axis_dims:
+            row[f"mean_off_axis_{dim}"] = _m([
+                float(r["off_axis_category_likerts"][dim]) for r in rs
             ])
         row["recommended"] = (
             n >= 4
@@ -125,6 +133,7 @@ def _example_rows(rows: list[dict]) -> list[dict]:
                 "positive_delta": r.get("positive_delta"),
                 "negative_delta": r.get("negative_delta"),
                 "off_axis_problem": r["confound_judgment"].get("off_axis_problem_likert"),
+                "max_off_axis_category_likert": r.get("max_off_axis_category_likert"),
                 "usable_for_training": r["confound_judgment"].get("usable_for_training"),
                 "likely_spurious_axis": r["confound_judgment"].get("likely_spurious_axis"),
                 "max_style_abs_delta": r.get("max_style_abs_delta"),
@@ -136,6 +145,8 @@ def _example_rows(rows: list[dict]) -> list[dict]:
             })
             for dim, val in r.get("style_deltas_pos_minus_neg", {}).items():
                 rec[f"style_delta_{dim}_pos_minus_neg"] = val
+            for dim, val in r.get("off_axis_category_likerts", {}).items():
+                rec[f"off_axis_{dim}"] = val
         out.append(rec)
     return out
 

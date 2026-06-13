@@ -496,30 +496,31 @@ STYLE_DIM_DESCRIPTIONS = {
 
 STYLE_DIMS = tuple(STYLE_DIM_DESCRIPTIONS)
 
-OFF_AXIS_CONFOUNDS = (
-    "length",
-    "helpfulness",
-    "harmlessness/refusal",
-    "honesty/truthfulness",
-    "thoughtfulness/reasoning depth",
-    "task context shift, such as code/chat/math/think",
-    "coding ability or coding style",
-    "multilingual behavior",
-    "confidence",
-    "hedging",
-    "vagueness",
-    "warmth",
-    "enthusiasm",
-    "praise/flattery",
-    "sycophancy",
-    "chattiness",
-    "formality",
-    "language shift",
-    "incoherence/repetition/rambling",
-    "refusal",
-    "persona echo",
-    "generic helpfulness",
-)
+OFF_AXIS_DIM_DESCRIPTIONS = {
+    "length": "response length or amount of detail",
+    "helpfulness": "generic helpful assistant behavior rather than the intended axis",
+    "harmlessness_refusal": "safety refusal, avoidance, or harmlessness framing",
+    "honesty_truthfulness": "truthfulness/correction/epistemic-honesty differences outside the intended axis",
+    "thoughtfulness_reasoning": "more deliberate reasoning or reflective depth on one side",
+    "task_context_shift": "different task mode or domain, such as code/chat/math/think",
+    "coding_style": "programming/code-like structure or software-engineering register",
+    "multilinguality": "non-English language use, translation-like behavior, or code-switching",
+    "confidence": "certainty/assertiveness differences",
+    "hedging": "caveats, uncertainty, maybe/likely language",
+    "vagueness": "generic, underspecified, or avoids concrete commitments",
+    "warmth": "emotional supportiveness",
+    "enthusiasm": "energetic/excited tone",
+    "praise_flattery": "flattery, approval, admiration, or second-person complimenting",
+    "sycophancy": "agreeing with or validating the user to please them",
+    "chattiness": "conversational filler or over-engagement",
+    "formality": "institutional/professional register",
+    "language_shift": "different language, dialect, script, or code-switching",
+    "incoherence": "confusion, repetition, rambling, or degraded local sense",
+    "refusal": "one side refuses or avoids the task more than the other",
+    "persona_echo": "one side repeats or paraphrases the persona instruction",
+}
+
+OFF_AXIS_DIMS = tuple(OFF_AXIS_DIM_DESCRIPTIONS)
 
 
 def _model_name(name: str) -> str:
@@ -786,7 +787,10 @@ Output strict JSON only:
 
 
 def _confound_judge_prompt(axis: Axis, scenario: str, a: str, b: str) -> str:
-    confounds = ", ".join(OFF_AXIS_CONFOUNDS)
+    dims = "\n".join(
+        f"- {dim}: {desc}" for dim, desc in OFF_AXIS_DIM_DESCRIPTIONS.items()
+    )
+    dim_json = "\n".join(f'  "{dim}_likert": 1,' for dim in OFF_AXIS_DIMS)
     return f"""\
 You are auditing whether a contrastive training pair isolates one intended axis.
 You do not know which response is positive or negative.
@@ -805,18 +809,26 @@ Response B:
 {b}
 
 Question: if a model trained on many pairs like this, could it learn a nuisance
-axis instead of the intended axis? Consider {confounds}.
+axis instead of the intended axis?
+
+Rate each possible off-axis confound from 1 to 7:
+1 = absent/no meaningful confound; 4 = mixed/noticeable confound;
+7 = severe confound likely to dominate training.
+
+Confounds:
+{dims}
 
 Output strict JSON only:
 {{
+{dim_json}
   "off_axis_problem_likert": 1,
   "likely_spurious_axis": "none or short phrase",
   "usable_for_training": true,
   "confound_reason": "one short sentence"
 }}
 
-Scale: 1 = clean/no meaningful nuisance; 4 = mixed/noticeable nuisance;
-7 = severe nuisance likely to dominate training."""
+The overall off_axis_problem_likert should summarize the worst meaningful
+confound, not the average."""
 
 
 class OpenRouter:
@@ -925,6 +937,8 @@ def _validate_style_obj(obj: dict) -> None:
 
 
 def _validate_confound_obj(obj: dict) -> None:
+    for dim in OFF_AXIS_DIMS:
+        _bounded_int(obj, f"{dim}_likert")
     _bounded_int(obj, "off_axis_problem_likert")
     _bounded_bool(obj, "usable_for_training")
 
@@ -990,8 +1004,8 @@ async def _evaluate_one(
                 messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
                     axis, scenario, a_text, b_text, pole="positive")}],
                 temperature=0.0,
-                max_tokens=260,
-                cache_tag="judge_axis_pos",
+                max_tokens=1200,
+                cache_tag="judge_axis_pos_v3",
                 seed=seed,
                 json_mode=True,
             ),
@@ -1000,8 +1014,8 @@ async def _evaluate_one(
                 messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
                     axis, scenario, a_text, b_text, pole="negative")}],
                 temperature=0.0,
-                max_tokens=260,
-                cache_tag="judge_axis_neg",
+                max_tokens=1200,
+                cache_tag="judge_axis_neg_v3",
                 seed=seed,
                 json_mode=True,
             ),
@@ -1009,8 +1023,8 @@ async def _evaluate_one(
                 model=judge_model,
                 messages=[{"role": "user", "content": _style_judge_prompt(scenario, a_text, b_text)}],
                 temperature=0.0,
-                max_tokens=520,
-                cache_tag="judge_style",
+                max_tokens=4096,
+                cache_tag="judge_style_v4",
                 seed=seed,
                 json_mode=True,
             ),
@@ -1018,8 +1032,8 @@ async def _evaluate_one(
                 model=judge_model,
                 messages=[{"role": "user", "content": _confound_judge_prompt(axis, scenario, a_text, b_text)}],
                 temperature=0.0,
-                max_tokens=300,
-                cache_tag="judge_confound",
+                max_tokens=4096,
+                cache_tag="judge_confound_v4",
                 seed=seed,
                 json_mode=True,
             ),
@@ -1047,6 +1061,11 @@ async def _evaluate_one(
         word_delta_frac = (word_pos - word_neg) / max(1, (word_pos + word_neg) / 2)
         style_deltas = {dim: _style_delta(style_j, dim, pos_label) for dim in STYLE_DIMS}
         max_style_abs_delta = max(abs(v) for v in style_deltas.values())
+        off_axis_likerts = {
+            dim: _bounded_int(confound_j, f"{dim}_likert")
+            for dim in OFF_AXIS_DIMS
+        }
+        max_off_axis_category_likert = max(off_axis_likerts.values())
         pos_echo = bool(style_j[f"persona_echo_{pos_label}"])
         neg_echo = bool(style_j[f"persona_echo_{neg_label}"])
         pos_refusal = bool(style_j[f"refusal_or_ai_break_{pos_label}"])
@@ -1088,6 +1107,8 @@ async def _evaluate_one(
             "length_ok": length_ok,
             "style_deltas_pos_minus_neg": style_deltas,
             "max_style_abs_delta": max_style_abs_delta,
+            "off_axis_category_likerts": off_axis_likerts,
+            "max_off_axis_category_likert": max_off_axis_category_likert,
             "persona_echo": pos_echo or neg_echo,
             "refusal_or_ai_break": pos_refusal or neg_refusal,
             "strict_pass": strict_pass,
@@ -1111,6 +1132,7 @@ def summarize(results: list[dict]) -> list[dict]:
         n = len(rows)
         pass_rate = sum(bool(r["strict_pass"]) for r in rows) / n
         off = [int(r["confound_judgment"]["off_axis_problem_likert"]) for r in rows]
+        off_cat_max = [int(r.get("max_off_axis_category_likert", 7)) for r in rows]
         style_max = [int(r["max_style_abs_delta"]) for r in rows]
         word_abs = [abs(float(r["word_delta_frac"])) for r in rows]
         axis_delta = [float(r["axis_delta"]) for r in rows]
@@ -1123,6 +1145,7 @@ def summarize(results: list[dict]) -> list[dict]:
             "strict_pass_rate": round(pass_rate, 3),
             "mean_axis_delta": round(_mean(axis_delta), 3),
             "mean_off_axis_problem": round(_mean(off), 3),
+            "mean_max_off_axis_category_likert": round(_mean(off_cat_max), 3),
             "mean_max_style_abs_delta": round(_mean(style_max), 3),
             "mean_abs_word_delta_frac": round(_mean(word_abs), 3),
             "persona_echo_rate": round(echo, 3),

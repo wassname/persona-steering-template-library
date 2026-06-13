@@ -33,7 +33,7 @@ V2_PILOT_META = {
     ),
 }
 
-SCORE_FORMULA = "100 * on_axis * off_axis_clean"
+SCORE_FORMULA = "100 * on_axis * (1 - off_axis)"
 
 SOURCE_INFO = {
     "repeng": {
@@ -72,6 +72,18 @@ SOURCE_INFO = {
         "type": "wassname template candidate",
         "url": "https://github.com/wassname/persona-steering-template-library",
     },
+    "antipasto3": {
+        "type": "wassname associated code / template file",
+        "url": "https://github.com/wassname/AntiPaSTO3/blob/main/antipasto3_jax/data.py",
+    },
+    "innerpissa_engineered": {
+        "type": "wassname associated code / engineered prompting baseline",
+        "url": "https://github.com/wassname/InnerPiSSA_private/blob/rebuttal/nbs/eval_baseline_prompting_engineered.py",
+    },
+    "w2schar_persona_notes": {
+        "type": "wassname notes / persona-writing guide",
+        "url": "https://github.com/wassname/w2schar-mini/blob/main/docs/how_to_write_personas.md",
+    },
 }
 
 
@@ -107,15 +119,21 @@ def _write_parquet(path: Path, rows: list[dict[str, Any]]) -> None:
 
 
 def _template_rows(path: Path) -> list[dict[str, Any]]:
+    sources = _template_sources()
     return [
         {
             "id": i + 1,
             "template": line.strip(),
             "template_jinja": _jinja(line.strip()),
             "template_format": "jinja2",
-            "source_id": "wassname_v2_candidate",
-            "source_type": _source_type("wassname_v2_candidate"),
-            "source_url": _source_url("wassname_v2_candidate"),
+            "source_id": sources.get(line.strip(), {}).get("source_id", "wassname_v2_candidate"),
+            "source_type": _source_type(
+                sources.get(line.strip(), {}).get("source_id", "wassname_v2_candidate")
+            ),
+            "source_url": _source_url(
+                sources.get(line.strip(), {}).get("source_id", "wassname_v2_candidate")
+            ),
+            "source_note": sources.get(line.strip(), {}).get("note", ""),
         }
         for i, line in enumerate(path.read_text().splitlines())
         if line.strip()
@@ -130,12 +148,12 @@ def _on_axis(row: dict[str, Any]) -> float:
     return round(_clamp01(float(row.get("mean_axis_delta") or 0.0) / 8.0), 4)
 
 
-def _off_axis_clean(row: dict[str, Any]) -> float:
-    return round(_clamp01((7.0 - float(row.get("mean_off_axis_problem") or 7.0)) / 6.0), 4)
+def _off_axis(row: dict[str, Any]) -> float:
+    return round(_clamp01((float(row.get("mean_off_axis_problem") or 7.0) - 1.0) / 6.0), 4)
 
 
-def _score(on_axis: float, off_axis_clean: float) -> float:
-    return round(100.0 * on_axis * off_axis_clean, 1)
+def _score(on_axis: float, off_axis: float) -> float:
+    return round(100.0 * on_axis * (1.0 - off_axis), 1)
 
 
 def _jinja(template: str) -> str:
@@ -148,6 +166,13 @@ def _source_type(source_id: str | None) -> str:
 
 def _source_url(source_id: str | None) -> str:
     return SOURCE_INFO.get(source_id or "", {}).get("url", "")
+
+
+def _template_sources() -> dict[str, dict[str, Any]]:
+    path = DATA / "template_sources.jsonl"
+    if not path.exists():
+        return {}
+    return {row["template"]: row for row in _read_jsonl(path)}
 
 
 def _v2_error_counts() -> dict[tuple[str, str], int]:
@@ -166,27 +191,34 @@ def _persona_pairs_by_id() -> dict[str, dict[str, Any]]:
 def _template_pair_score_rows() -> list[dict[str, Any]]:
     pairs = _persona_pairs_by_id()
     errors = _v2_error_counts()
+    template_sources = _template_sources()
     rows = []
     for stat in _read_jsonl(DATA / "v2_pilot_seed23_template_pair_stats.jsonl"):
         pair = pairs.get(stat["persona_pair"], {})
+        template_source = template_sources.get(stat["template"], {})
+        template_source_id = template_source.get("source_id", "wassname_v2_candidate")
         n_success = int(stat.get("n") or 0)
         n_errors = errors.get((stat["template"], stat["persona_pair"]), 0)
         on_axis = _on_axis(stat)
-        off_axis_clean = _off_axis_clean(stat)
-        score = _score(on_axis, off_axis_clean)
+        off_axis = _off_axis(stat)
+        score = _score(on_axis, off_axis)
         source_id = pair.get("source_id", "wassname_v2_candidate")
         rows.append({
             "id": 0,
             "template": _jinja(stat["template"]),
             "score": score,
             "on_axis": on_axis,
-            "off_axis_clean": off_axis_clean,
+            "off_axis": off_axis,
             "positive_persona": pair.get("pos"),
             "negative_persona": pair.get("neg"),
             "contrast": f"{pair.get('neg', '')}->{pair.get('pos', '')}",
             "source": source_id,
             "source_type": _source_type(source_id),
             "source_url": _source_url(source_id),
+            "template_source": template_source_id,
+            "template_source_type": _source_type(template_source_id),
+            "template_source_url": _source_url(template_source_id),
+            "template_source_note": template_source.get("note", ""),
             "persona_pair": stat["persona_pair"],
             "positive_behavior": pair.get("positive_behavior"),
             "negative_behavior": pair.get("negative_behavior"),
@@ -370,7 +402,11 @@ So we try persona/template pairs on one model. We use another model as a judge, 
 
 This field is pre-scientific in a way: it is still an art. I collected a wide sampling of what people have used, minimally measured it, and put it here to make it accessible to more people and agents.
 
+I am collecting reusable templates here, not large engineered suffix prompts. Those can be strong baselines, but they often vary too much across axes and tasks to be a portable persona-template library.
+
 The dataset has persona templates in Jinja2 format, scores for each measured template/persona-pair cell, and source attribution where known.
+
+Persona-pair provenance is marked as `source`, `source_type`, and `source_url`. Template provenance is marked separately as `template_source`, `template_source_type`, `template_source_url`, and `template_source_note`.
 
 ## Score
 
@@ -379,8 +415,10 @@ Start with `main`.
 The main column is `score`, a conservative 0-100 clean-axis score:
 
 ```text
-score = 100 * on_axis * off_axis_clean
+score = 100 * on_axis * (1 - off_axis)
 ```
+
+`on_axis` is normalized from the intended-axis judge rating. `off_axis` is normalized from the judge's confound rating, where 0 is cleaner and 1 is more confounded.
 
 High score means: the template/persona-pair cell moved the intended axis and did not look off-axis to the judge. Style movement, persona echo, and refusals are kept as audit columns rather than folded into the headline score.
 
@@ -389,6 +427,8 @@ Low score can mean either no intended-axis movement or too much confounding. Rea
 ## Confounds Audited
 
 The judge audits length, generic helpfulness, harmlessness/refusal, honesty/truthfulness, thoughtfulness/reasoning depth, task-context shift (code/chat/math/think), coding style, multilingual behavior, confidence, hedging, vagueness, warmth, enthusiasm, praise/flattery, sycophancy, chattiness, formality, language shift, incoherence/repetition/rambling, persona echo, and generic off-axis helpfulness.
+
+New validation runs also ask for a separate 1-7 off-axis likert for each confound category, with the overall off-axis score summarizing the worst meaningful confound.
 
 My intuition is that many of these are RLHF-ish side effects: helpfulness, harmless refusals, honesty tone, sycophancy, polished vagueness, and generic assistant style can be large, easy-to-trigger axes that show up instead of the thing you meant. - wassname
 
@@ -411,6 +451,8 @@ This library samples from or was shaped by:
 - sycophancy literature: https://arxiv.org/abs/2310.13548
 - OLMo 3 report: https://arxiv.org/abs/2512.13961
 - wassname/w2schar-mini: https://github.com/wassname/w2schar-mini
+- wassname/AntiPaSTO3: https://github.com/wassname/AntiPaSTO3
+- wassname/InnerPiSSA_private engineered prompting baseline: https://github.com/wassname/InnerPiSSA_private
 
 ## Citation
 

@@ -8,6 +8,7 @@ license = { text = "MIT" }
 dependencies = [
   "huggingface-hub>=1.18.0",
   "loguru",
+  "matplotlib>=3.10.0",
   "openai",
   "pyarrow>=24.0.0",
   "python-dotenv",
@@ -20,4 +21,3 @@ package = false
 
 [tool.ruff]
 line-length = 100
-

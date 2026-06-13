@@ -25,8 +25,9 @@ This field is pre-scientific in a way: it is still an art. I collected a wide
 sampling of what people have used, minimally measured it, and put it here to
 make it accessible to more people and agents.
 
-<!-- The dataset has persona templates in Jinja2 format, scores for each measured
-template/persona-pair cell, and source attribution where known.  TODO this shoudl become redundnat -->
+I am collecting reusable templates here, not large engineered suffix prompts.
+Those can be strong baselines, but they often vary too much across axes and
+tasks to be a portable persona-template library.
 
 ## Use
 
@@ -35,21 +36,29 @@ first: one row per measured template/persona-pair cell.
 
 Important columns:
 
-- `template_jinja`: TODO Example for each, description of each
+- `template`: Jinja2 template, with the persona inserted at `{{ persona }}`
 - `score`
+- `on_axis`
+- `off_axis`
 - `positive_persona`
 - `negative_persona`
 - `contrast`
 - `source`
 - `source_type`
+- `template_source`
+- `template_source_url`
 
 Then check `examples` to see the paired completions behind the score.
 
 ## Score
 
 ```text
-score = 100 * on_axis * off_axis_clean
+score = 100 * on_axis * (1 - off_axis)
 ```
+
+`on_axis` is normalized from the intended-axis judge rating. `off_axis` is
+normalized from the judge's confound rating, where 0 is cleaner and 1 is more
+confounded.
 
 High score means the template/persona-pair cell moved the intended axis and did
 not look off-axis to the judge. Style movement, persona echo, and refusals are
@@ -81,6 +90,10 @@ style, multilinguality, verbosity, chattiness, confidence, hedging, vagueness,
 warmth, enthusiasm, praise, sycophancy, directness, formality, language shift,
 and incoherence.
 
+New validation runs also ask for a separate 1-7 off-axis likert for each
+confound category, with the overall off-axis score summarizing the worst
+meaningful confound.
+
 Code [scripts/validate_persona_axes_openrouter.py](scripts/validate_persona_axes_openrouter.py#L474).
 
 ## Provenance
@@ -100,6 +113,8 @@ This library samples from or was shaped by:
 - sycophancy literature: https://arxiv.org/abs/2310.13548
 - OLMo 3 report: https://arxiv.org/abs/2512.13961
 - wassname/w2schar-mini: https://github.com/wassname/w2schar-mini
+- wassname/AntiPaSTO3: https://github.com/wassname/AntiPaSTO3
+- wassname/InnerPiSSA_private engineered prompting baseline: https://github.com/wassname/InnerPiSSA_private
 
 ## Appendix: Run
 
@@ -107,7 +122,7 @@ This library samples from or was shaped by:
 uv sync
 uv run python scripts/validate_persona_axes_openrouter.py \
   --dry-run \
-  --axes data/persona_pairs_v2_candidates.jsonl \
+  --axes data/persona_pairs_pilot_two.jsonl \
   --templates data/templates_v2_candidates.txt \
   --family data/scenarios_v2_candidates.jsonl \
   --n 2 \
@@ -117,6 +132,12 @@ uv run python scripts/validate_persona_axes_openrouter.py \
 ```sh
 uv run python scripts/build_hf_dataset.py \
   --out /tmp/persona-steering-template-library-hf
+```
+
+```sh
+uv run python scripts/plot_on_off_axis.py \
+  /tmp/persona-steering-template-library-hf/parquet/main.parquet \
+  --out out/on_off_axis.png
 ```
 
 ## Citation

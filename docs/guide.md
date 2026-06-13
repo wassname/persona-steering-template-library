@@ -21,14 +21,22 @@ This field is pre-scientific in a way: it is still an art. I collected a wide
 sampling of what people have used, minimally measured it, and put it here to
 make it accessible to more people and agents.
 
+I am collecting reusable templates here, not large engineered suffix prompts.
+Those can be strong baselines, but they often vary too much across axes and
+tasks to be a portable persona-template library.
+
 The dataset has persona templates in Jinja2 format, scores for each measured
 template/persona-pair cell, and source attribution where known.
 
 ## Score
 
 ```text
-score = 100 * on_axis * off_axis_clean
+score = 100 * on_axis * (1 - off_axis)
 ```
+
+`on_axis` is normalized from the intended-axis judge rating. `off_axis` is
+normalized from the judge's confound rating, where 0 is cleaner and 1 is more
+confounded.
 
 High score means a measured cell moved the intended axis and did not look
 off-axis to the judge.
@@ -51,6 +59,10 @@ honesty/truthfulness, thoughtfulness/reasoning, task-context shift, coding
 style, multilinguality, verbosity, chattiness, confidence, hedging, vagueness,
 warmth, enthusiasm, praise, sycophancy, directness, formality, language shift,
 and incoherence.
+
+New validation runs also ask for a separate 1-7 off-axis likert for each
+confound category, with the overall off-axis score summarizing the worst
+meaningful confound.
 
 My intuition is that many of these are RLHF-ish side effects: helpfulness,
 harmless refusals, honesty tone, sycophancy, polished vagueness, and generic
@@ -83,6 +95,13 @@ Sources are marked as `source`, `source_type`, and `source_url`. Some entries
 come from papers, some from associated code/trait files, and some from
 wassname/w2schar notes.
 
+Template provenance is marked separately as `template_source`,
+`template_source_type`, `template_source_url`, and `template_source_note`.
+
+For a cheap smoke run, use `data/persona_pairs_pilot_two.jsonl`: one obvious
+pair and one subtle pair. Use `data/persona_pairs_v2_candidates.jsonl` when
+you want the wider candidate library.
+
 ## Acknowledgements
 
 This library samples from or was shaped by:
@@ -94,3 +113,5 @@ This library samples from or was shaped by:
 - sycophancy literature: https://arxiv.org/abs/2310.13548
 - OLMo 3 report: https://arxiv.org/abs/2512.13961
 - wassname/w2schar-mini: https://github.com/wassname/w2schar-mini
+- wassname/AntiPaSTO3: https://github.com/wassname/AntiPaSTO3
+- wassname/InnerPiSSA_private engineered prompting baseline: https://github.com/wassname/InnerPiSSA_private
