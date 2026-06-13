@@ -69,6 +69,8 @@ def _mean_by_template(rows: list[dict]) -> list[dict]:
         out.append({
             "template": template,
             "score": round(sum(row["score"] for row in rs) / len(rs), 1),
+            "judge_std": round(
+                sum(float(row["mean_axis_delta_judge_std"]) for row in rs) / len(rs), 2),
             "n_cells": len(rs),
         })
     return sorted(out, key=lambda row: row["score"], reverse=True)
@@ -83,25 +85,28 @@ def _stress_templates() -> set[str]:
 
 
 def _table(rows: list[dict]) -> str:
-    lines = ["| template | score |", "|---|---:|"]
+    lines = ["| template | score | judge_std |", "|---|---:|---:|"]
     for row in rows:
-        lines.append(f"| {_markdown_text(row['template'])} | {row['score']:.1f} |")
+        lines.append(
+            f"| {_markdown_text(row['template'])} | {row['score']:.1f} | "
+            f"{float(row['judge_std']):.2f} |"
+        )
     return "\n".join(lines)
 
 
 def _detail_table(rows: list[dict]) -> str:
-    lines = ["| template | persona_pair | score |", "|---|---|---:|"]
+    lines = ["| template | persona_pair | score | judge_std |", "|---|---|---:|---:|"]
     for row in rows:
         lines.append(
-            f"| {_markdown_text(row['template'])} | `{row['persona_pair']}` | {row['score']:.1f} |"
+            f"| {_markdown_text(row['template'])} | `{row['persona_pair']}` | "
+            f"{row['score']:.1f} | {float(row['mean_axis_delta_judge_std']):.2f} |"
         )
     return "\n".join(lines)
 
 
 def _results_block() -> str:
     normal_rows = _mean_by_template(_read_jsonl(NORMAL_STATS))
-    stress_templates = _stress_templates()
-    top_rows = [row for row in normal_rows if row["template"] not in stress_templates][:10]
+    top_rows = normal_rows[:10]
 
     return "\n\n".join([
         "## Results Snapshot",
@@ -109,7 +114,7 @@ def _results_block() -> str:
             "Seed-24 pilot. Scores use `score = 100 * on_axis * (1 - off_axis)`; "
             "rows below average over the measured persona pairs for each template."
         ),
-        "Top reusable templates:",
+        "Top templates:",
         _table(top_rows),
     ])
 
@@ -164,8 +169,8 @@ def _appendix_block() -> str:
         "Engineered prefixes:",
         _engineered_prefixes(),
         (
-            "These simple roleplay and stress strings are kept out of the main "
-            "library table. Some move the obvious axis, but many leak the persona "
+            "These simple roleplay and stress strings are called out separately "
+            "because some move the obvious axis while many leak the persona "
             "label or create style/task-mode confounds; the subtle axis still "
             "mostly fails."
         ),

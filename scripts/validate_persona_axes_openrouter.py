@@ -883,109 +883,6 @@ async def _evaluate_one(
         pos_label, neg_label, order = _labels_for(seed, axis.id, template, str(row_i), scenario)
         a_text, b_text = _response_by_label(pos_label, pos_text, neg_text)
 
-        if pos_text == neg_text:
-            pos_refusal_phrase_hits = _refusal_phrase_hits(pos_text)
-            neg_refusal_phrase_hits = _refusal_phrase_hits(neg_text)
-            pos_persona_echo_hits = _persona_echo_hits(
-                pos_text, axis.pos_descriptor, pos_persona)
-            neg_persona_echo_hits = _persona_echo_hits(
-                neg_text, axis.neg_descriptor, neg_persona)
-            pos_persona_overlap_tokens = _persona_overlap_tokens(pos_text, pos_persona)
-            neg_persona_overlap_tokens = _persona_overlap_tokens(neg_text, neg_persona)
-            axis_judges = [
-                {
-                    "judge_model": axis_judge_model,
-                    "positive_axis_forward_judgment": {
-                        "A_more_target_than_B": 3.0,
-                        "target_reason": "responses are identical",
-                    },
-                    "positive_axis_reverse_judgment": {
-                        "A_more_target_than_B": 3.0,
-                        "target_reason": "responses are identical",
-                    },
-                    "negative_axis_forward_judgment": {
-                        "A_more_target_than_B": 3.0,
-                        "target_reason": "responses are identical",
-                    },
-                    "negative_axis_reverse_judgment": {
-                        "A_more_target_than_B": 3.0,
-                        "target_reason": "responses are identical",
-                    },
-                    "positive_forward_delta": 0.0,
-                    "positive_reverse_delta": 0.0,
-                    "negative_forward_delta": 0.0,
-                    "negative_reverse_delta": 0.0,
-                    "pairwise_positive_delta": 0.0,
-                    "pairwise_negative_delta": 0.0,
-                    "axis_delta": 0.0,
-                }
-                for axis_judge_model in axis_judge_models
-            ]
-            style_j = {
-                **{f"{dim}_A": 1.0 for dim in STYLE_DIMS},
-                **{f"{dim}_B": 1.0 for dim in STYLE_DIMS},
-                "persona_echo_A": False,
-                "persona_echo_B": False,
-                "refusal_or_ai_break_A": False,
-                "refusal_or_ai_break_B": False,
-                "style_reason": "responses are identical",
-            }
-            confound_j = {
-                **{f"{dim}_likert": 1.0 for dim in OFF_AXIS_DIMS},
-                "off_axis_problem_likert": 1.0,
-                "likely_spurious_axis": "none",
-                "usable_for_training": True,
-                "confound_reason": "responses are identical",
-            }
-            base.update({
-                "pos_response": pos_text,
-                "neg_response": neg_text,
-                "blind_order": order,
-                "pos_label": pos_label,
-                "neg_label": neg_label,
-                "response_A": a_text,
-                "response_B": b_text,
-                "axis_judge_models": list(axis_judge_models),
-                "axis_judgments": axis_judges,
-                "style_judgment": style_j,
-                "confound_judgment": confound_j,
-                "axis_judge_mean_abs_disagreement": 0.0,
-                "axis_delta_judge_mean": 0.0,
-                "axis_delta_judge_std": 0.0,
-                "positive_delta": 0.0,
-                "negative_delta": 0.0,
-                "pairwise_positive_delta": 0.0,
-                "pairwise_negative_delta": 0.0,
-                "axis_delta": 0.0,
-                "on_axis_frac": 0.0,
-                "word_pos": len(_words(pos_text)),
-                "word_neg": len(_words(neg_text)),
-                "word_delta_frac": 0.0,
-                "response_token_jaccard": 1.0,
-                "pos_repeated_token_frac": round(_repeated_token_frac(pos_text), 4),
-                "neg_repeated_token_frac": round(_repeated_token_frac(neg_text), 4),
-                "pos_persona_overlap_tokens": pos_persona_overlap_tokens,
-                "neg_persona_overlap_tokens": neg_persona_overlap_tokens,
-                "length_gate_enabled": max_word_delta_frac > 0,
-                "length_ok": True,
-                "style_deltas_pos_minus_neg": {dim: 0.0 for dim in STYLE_DIMS},
-                "max_style_abs_delta": 0.0,
-                "off_axis_category_likerts": {dim: 1.0 for dim in OFF_AXIS_DIMS},
-                "max_off_axis_category_likert": 1.0,
-                "off_axis_problem_frac": 0.0,
-                "pos_refusal_phrase_hits": pos_refusal_phrase_hits,
-                "neg_refusal_phrase_hits": neg_refusal_phrase_hits,
-                "pos_persona_echo_hits": pos_persona_echo_hits,
-                "neg_persona_echo_hits": neg_persona_echo_hits,
-                "judge_persona_echo": False,
-                "persona_echo": bool(pos_persona_echo_hits or neg_persona_echo_hits),
-                "judge_refusal_or_ai_break": False,
-                "refusal_or_ai_break": bool(pos_refusal_phrase_hits or neg_refusal_phrase_hits),
-                "strict_pass": False,
-                "identity_pair": True,
-            })
-            return base
-
         axis_tasks = []
         for axis_judge_model in axis_judge_models:
             axis_tasks.extend([
@@ -1174,7 +1071,7 @@ async def _evaluate_one(
             "pairwise_positive_delta": pairwise_positive_delta,
             "pairwise_negative_delta": pairwise_negative_delta,
             "axis_delta": round(axis_delta, 4),
-            "on_axis_frac": round(_normalize_likert(axis_delta + 8.0, 0.0, 16.0), 4),
+            "on_axis_frac": round(max(0.0, min(1.0, axis_delta / 8.0)), 4),
             "word_pos": word_pos,
             "word_neg": word_neg,
             "word_delta_frac": round(word_delta_frac, 4),
