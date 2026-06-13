@@ -39,6 +39,8 @@ from openai import AsyncOpenAI
 from tabulate import tabulate
 from tqdm.asyncio import tqdm as atqdm
 
+from template_catalog import active_template_rows, load_template_catalog
+
 ROOT = Path(__file__).resolve().parents[1]
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
@@ -555,6 +557,25 @@ def _bounded_int(obj: dict, key: str, lo: int = 1, hi: int = 7) -> int:
     return val
 
 
+def _bounded_score(obj: dict, key: str, lo: float, hi: float, step: float = 0.5) -> float:
+    if key not in obj:
+        raise ValueError(f"missing {key!r} in {obj}")
+    val = obj[key]
+    if not isinstance(val, (int, float)):
+        raise ValueError(f"{key!r} must be numeric {lo}-{hi}, got {val!r}")
+    score = float(val)
+    if not lo <= score <= hi:
+        raise ValueError(f"{key!r} must be numeric {lo}-{hi}, got {val!r}")
+    rounded = round(score / step) * step
+    if abs(score - rounded) > 1e-6:
+        raise ValueError(f"{key!r} must be in steps of {step}, got {val!r}")
+    return score
+
+
+def _normalize_likert(score: float, lo: float, hi: float) -> float:
+    return (score - lo) / (hi - lo)
+
+
 def _bounded_bool(obj: dict, key: str) -> bool:
     if key not in obj or not isinstance(obj[key], bool):
         raise ValueError(f"{key!r} must be boolean in {obj}")
@@ -606,6 +627,35 @@ def _scenario_text(row: dict) -> str:
     if not text:
         raise ValueError(f"scenario row has no text/prompt/question field: {row}")
     return str(text)
+
+
+def _scenario_id(row: dict, row_i: int) -> str:
+    return str(row.get("id") or f"row_{row_i}")
+
+
+def _eval_id(
+    *,
+    seed: int,
+    row: dict,
+    row_i: int,
+    scenario: str,
+    axis_id: str,
+    template: str,
+    generator_model: str,
+    judge_model: str,
+    gen_temperature: float,
+) -> str:
+    return _hkey({
+        "seed": seed,
+        "row_i": row_i,
+        "scenario_id": _scenario_id(row, row_i),
+        "scenario": scenario,
+        "axis_id": axis_id,
+        "template": template,
+        "generator_model": generator_model,
+        "judge_model": judge_model,
+        "gen_temperature": gen_temperature,
+    })
 
 
 def _select_axes(axis_arg: str, include_canary: bool) -> list[Axis]:
@@ -675,7 +725,13 @@ def _select_templates(arg: str) -> tuple[str, ...]:
         return DEFAULT_TEMPLATES
     path = Path(arg)
     if path.exists():
-        templates = tuple(line.strip() for line in path.read_text().splitlines() if line.strip())
+        if path.suffix in {".jsonl", ".yaml", ".yml"}:
+            templates = tuple(
+                row["template_runtime"]
+                for row in active_template_rows(load_template_catalog(path))
+            )
+        else:
+            templates = tuple(line.strip() for line in path.read_text().splitlines() if line.strip())
     else:
         templates = tuple(x.strip() for x in arg.split("||") if x.strip())
     missing = [t for t in templates if "{persona}" not in t]
@@ -729,23 +785,16 @@ Response A:
 Response B:
 {b}
 
-Answer the pairwise comparison in both directions, then rate each response
-independently.
+Answer the pairwise comparison in both directions only.
 
-Pairwise scale:
-1 = definitely no, 2 = probably no, 3 = tie/unclear, 4 = probably yes,
-5 = definitely yes.
-
-Independent score scale:
-1 = target behavior absent, 3 = mixed/unclear, 5 = target behavior central and
-behaviorally specific.
+Use a 1.0 to 5.0 scale in 0.5 increments:
+1.0 = definitely no, 2.0 = probably no, 3.0 = tie/unclear, 4.0 = probably yes,
+5.0 = definitely yes.
 
 Output strict JSON only:
 {{
-  "A_more_target_than_B": 3,
-  "B_more_target_than_A": 3,
-  "target_score_A": 1,
-  "target_score_B": 1,
+  "A_more_target_than_B": 3.0,
+  "B_more_target_than_A": 3.0,
   "target_reason": "one short sentence"
 }}"""
 
@@ -753,7 +802,7 @@ Output strict JSON only:
 def _style_judge_prompt(scenario: str, a: str, b: str) -> str:
     dims = "\n".join(f"- {dim}: {desc}" for dim, desc in STYLE_DIM_DESCRIPTIONS.items())
     dim_json = "\n".join(
-        f'  "{dim}_A": 1, "{dim}_B": 1,' for dim in STYLE_DIMS
+        f'  "{dim}_A": 1.0, "{dim}_B": 1.0,' for dim in STYLE_DIMS
     )
     return f"""\
 You are a fresh-eyes style auditor. Ignore whether either response gives better
@@ -769,8 +818,8 @@ Response A:
 Response B:
 {b}
 
-For each style dimension, rate A and B from 1 to 7. Use the same standard for
-both responses.
+For each style dimension, rate A and B from 1.0 to 7.0 in 0.5 increments. Use
+the same standard for both responses.
 
 Dimensions:
 {dims}
@@ -790,7 +839,7 @@ def _confound_judge_prompt(axis: Axis, scenario: str, a: str, b: str) -> str:
     dims = "\n".join(
         f"- {dim}: {desc}" for dim, desc in OFF_AXIS_DIM_DESCRIPTIONS.items()
     )
-    dim_json = "\n".join(f'  "{dim}_likert": 1,' for dim in OFF_AXIS_DIMS)
+    dim_json = "\n".join(f'  "{dim}_likert": 1.0,' for dim in OFF_AXIS_DIMS)
     return f"""\
 You are auditing whether a contrastive training pair isolates one intended axis.
 You do not know which response is positive or negative.
@@ -811,9 +860,9 @@ Response B:
 Question: if a model trained on many pairs like this, could it learn a nuisance
 axis instead of the intended axis?
 
-Rate each possible off-axis confound from 1 to 7:
-1 = absent/no meaningful confound; 4 = mixed/noticeable confound;
-7 = severe confound likely to dominate training.
+Rate each possible off-axis confound from 1.0 to 7.0 in 0.5 increments:
+1.0 = absent/no meaningful confound; 4.0 = mixed/noticeable confound;
+7.0 = severe confound likely to dominate training.
 
 Confounds:
 {dims}
@@ -821,7 +870,7 @@ Confounds:
 Output strict JSON only:
 {{
 {dim_json}
-  "off_axis_problem_likert": 1,
+  "off_axis_problem_likert": 1.0,
   "likely_spurious_axis": "none or short phrase",
   "usable_for_training": true,
   "confound_reason": "one short sentence"
@@ -903,43 +952,39 @@ def _response_by_label(pos_label: str, pos_text: str, neg_text: str) -> tuple[st
     raise ValueError(pos_label)
 
 
-def _style_delta(style: dict, dim: str, pos_label: str) -> int:
-    pos_v = _bounded_int(style, f"{dim}_{pos_label}")
+def _style_delta(style: dict, dim: str, pos_label: str) -> float:
+    pos_v = _bounded_score(style, f"{dim}_{pos_label}", 1.0, 7.0)
     neg_label = "B" if pos_label == "A" else "A"
-    neg_v = _bounded_int(style, f"{dim}_{neg_label}")
+    neg_v = _bounded_score(style, f"{dim}_{neg_label}", 1.0, 7.0)
     return pos_v - neg_v
 
 
 def _validate_axis_obj(obj: dict) -> None:
-    for key in ("A_more_target_than_B", "B_more_target_than_A", "target_score_A", "target_score_B"):
-        _bounded_int(obj, key, 1, 5)
+    for key in ("A_more_target_than_B", "B_more_target_than_A"):
+        _bounded_score(obj, key, 1.0, 5.0)
 
 
-def _target_score(obj: dict, label: str) -> int:
-    return _bounded_int(obj, f"target_score_{label}", 1, 5)
-
-
-def _pairwise_expected(obj: dict, pos_label: str) -> int:
+def _pairwise_expected(obj: dict, pos_label: str) -> float:
     """Positive means the pos response beats the neg response on this target."""
     if pos_label == "A":
-        return _bounded_int(obj, "A_more_target_than_B", 1, 5) - 3
+        return _bounded_score(obj, "A_more_target_than_B", 1.0, 5.0) - 3.0
     if pos_label == "B":
-        return _bounded_int(obj, "B_more_target_than_A", 1, 5) - 3
+        return _bounded_score(obj, "B_more_target_than_A", 1.0, 5.0) - 3.0
     raise ValueError(pos_label)
 
 
 def _validate_style_obj(obj: dict) -> None:
     for dim in STYLE_DIMS:
-        _bounded_int(obj, f"{dim}_A")
-        _bounded_int(obj, f"{dim}_B")
+        _bounded_score(obj, f"{dim}_A", 1.0, 7.0)
+        _bounded_score(obj, f"{dim}_B", 1.0, 7.0)
     for key in ("persona_echo_A", "persona_echo_B", "refusal_or_ai_break_A", "refusal_or_ai_break_B"):
         _bounded_bool(obj, key)
 
 
 def _validate_confound_obj(obj: dict) -> None:
     for dim in OFF_AXIS_DIMS:
-        _bounded_int(obj, f"{dim}_likert")
-    _bounded_int(obj, "off_axis_problem_likert")
+        _bounded_score(obj, f"{dim}_likert", 1.0, 7.0)
+    _bounded_score(obj, "off_axis_problem_likert", 1.0, 7.0)
     _bounded_bool(obj, "usable_for_training")
 
 
@@ -947,7 +992,8 @@ async def _evaluate_one(
     router: OpenRouter,
     *,
     generator_model: str,
-    judge_model: str,
+    style_judge_model: str,
+    axis_judge_models: tuple[str, ...],
     axis: Axis,
     template: str,
     row: dict,
@@ -960,7 +1006,19 @@ async def _evaluate_one(
     pos_persona = _persona_text(axis, template, axis.pos_descriptor, "pos")
     neg_persona = _persona_text(axis, template, axis.neg_descriptor, "neg")
     base = {
+        "eval_id": _eval_id(
+            seed=seed,
+            row=row,
+            row_i=row_i,
+            scenario=scenario,
+            axis_id=axis.id,
+            template=template,
+            generator_model=generator_model,
+            judge_model=",".join(axis_judge_models) + "|" + style_judge_model,
+            gen_temperature=gen_temperature,
+        ),
         "row": row_i,
+        "scenario_id": _scenario_id(row, row_i),
         "source": row.get("source"),
         "config": row.get("config"),
         "tags": row.get("tags", []),
@@ -998,71 +1056,86 @@ async def _evaluate_one(
         pos_label, neg_label, order = _labels_for(seed, axis.id, template, str(row_i), scenario)
         a_text, b_text = _response_by_label(pos_label, pos_text, neg_text)
 
-        pos_axis_raw, neg_axis_raw, style_raw, confound_raw = await asyncio.gather(
+        axis_tasks = []
+        for axis_judge_model in axis_judge_models:
+            axis_tasks.extend([
+                router.chat_jsonish(
+                    model=axis_judge_model,
+                    messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
+                        axis, scenario, a_text, b_text, pole="positive")}],
+                    temperature=0.0,
+                    max_tokens=1200,
+                    cache_tag=f"judge_axis_pos_v5_{_model_name(axis_judge_model).replace('/', '_')}",
+                    seed=seed,
+                    json_mode=True,
+                ),
+                router.chat_jsonish(
+                    model=axis_judge_model,
+                    messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
+                        axis, scenario, a_text, b_text, pole="negative")}],
+                    temperature=0.0,
+                    max_tokens=1200,
+                    cache_tag=f"judge_axis_neg_v5_{_model_name(axis_judge_model).replace('/', '_')}",
+                    seed=seed,
+                    json_mode=True,
+                ),
+            ])
+        style_raw, confound_raw, *axis_raw = await asyncio.gather(
             router.chat_jsonish(
-                model=judge_model,
-                messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
-                    axis, scenario, a_text, b_text, pole="positive")}],
-                temperature=0.0,
-                max_tokens=1200,
-                cache_tag="judge_axis_pos_v3",
-                seed=seed,
-                json_mode=True,
-            ),
-            router.chat_jsonish(
-                model=judge_model,
-                messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
-                    axis, scenario, a_text, b_text, pole="negative")}],
-                temperature=0.0,
-                max_tokens=1200,
-                cache_tag="judge_axis_neg_v3",
-                seed=seed,
-                json_mode=True,
-            ),
-            router.chat_jsonish(
-                model=judge_model,
+                model=style_judge_model,
                 messages=[{"role": "user", "content": _style_judge_prompt(scenario, a_text, b_text)}],
                 temperature=0.0,
                 max_tokens=4096,
-                cache_tag="judge_style_v4",
+                cache_tag="judge_style_v5",
                 seed=seed,
                 json_mode=True,
             ),
             router.chat_jsonish(
-                model=judge_model,
+                model=style_judge_model,
                 messages=[{"role": "user", "content": _confound_judge_prompt(axis, scenario, a_text, b_text)}],
                 temperature=0.0,
                 max_tokens=4096,
-                cache_tag="judge_confound_v4",
+                cache_tag="judge_confound_v5",
                 seed=seed,
                 json_mode=True,
             ),
+            *axis_tasks,
         )
-        pos_axis_j = _json_obj(pos_axis_raw)
-        neg_axis_j = _json_obj(neg_axis_raw)
         style_j = _json_obj(style_raw)
         confound_j = _json_obj(confound_raw)
-        _validate_axis_obj(pos_axis_j)
-        _validate_axis_obj(neg_axis_j)
         _validate_style_obj(style_j)
         _validate_confound_obj(confound_j)
+        axis_judges = []
+        for i, axis_judge_model in enumerate(axis_judge_models):
+            pos_axis_j = _json_obj(axis_raw[2 * i])
+            neg_axis_j = _json_obj(axis_raw[2 * i + 1])
+            _validate_axis_obj(pos_axis_j)
+            _validate_axis_obj(neg_axis_j)
+            pairwise_positive_delta = _pairwise_expected(pos_axis_j, pos_label)
+            pairwise_negative_delta = -_pairwise_expected(neg_axis_j, pos_label)
+            axis_judges.append({
+                "judge_model": axis_judge_model,
+                "positive_axis_judgment": pos_axis_j,
+                "negative_axis_judgment": neg_axis_j,
+                "pairwise_positive_delta": pairwise_positive_delta,
+                "pairwise_negative_delta": pairwise_negative_delta,
+                "axis_delta": 2.0 * (pairwise_positive_delta + pairwise_negative_delta),
+            })
 
-        pos_response_positive_score = _target_score(pos_axis_j, pos_label)
-        neg_response_positive_score = _target_score(pos_axis_j, neg_label)
-        pos_response_negative_score = _target_score(neg_axis_j, pos_label)
-        neg_response_negative_score = _target_score(neg_axis_j, neg_label)
-        positive_delta = pos_response_positive_score - neg_response_positive_score
-        negative_delta = neg_response_negative_score - pos_response_negative_score
-        axis_delta = positive_delta + negative_delta
-        pairwise_positive_delta = _pairwise_expected(pos_axis_j, pos_label)
-        pairwise_negative_delta = -_pairwise_expected(neg_axis_j, pos_label)
+        pairwise_positive_delta = sum(j["pairwise_positive_delta"] for j in axis_judges) / len(axis_judges)
+        pairwise_negative_delta = sum(j["pairwise_negative_delta"] for j in axis_judges) / len(axis_judges)
+        axis_delta = sum(j["axis_delta"] for j in axis_judges) / len(axis_judges)
+        axis_judge_mean_abs_disagreement = 0.0
+        if len(axis_judges) > 1:
+            vals = [j["axis_delta"] for j in axis_judges]
+            axis_judge_mean_abs_disagreement = sum(abs(a - b) for a in vals for b in vals) / (len(vals) * len(vals))
         word_pos = len(_words(pos_text))
         word_neg = len(_words(neg_text))
         word_delta_frac = (word_pos - word_neg) / max(1, (word_pos + word_neg) / 2)
         style_deltas = {dim: _style_delta(style_j, dim, pos_label) for dim in STYLE_DIMS}
         max_style_abs_delta = max(abs(v) for v in style_deltas.values())
         off_axis_likerts = {
-            dim: _bounded_int(confound_j, f"{dim}_likert")
+            dim: _bounded_score(confound_j, f"{dim}_likert", 1.0, 7.0)
             for dim in OFF_AXIS_DIMS
         }
         max_off_axis_category_likert = max(off_axis_likerts.values())
@@ -1073,7 +1146,7 @@ async def _evaluate_one(
         length_ok = True if max_word_delta_frac <= 0 else abs(word_delta_frac) <= max_word_delta_frac
         strict_pass = (
             axis_delta >= 3
-            and int(confound_j["off_axis_problem_likert"]) <= 2
+            and float(confound_j["off_axis_problem_likert"]) <= 2.0
             and bool(confound_j["usable_for_training"])
             and max_style_abs_delta <= 2
             and length_ok
@@ -1087,19 +1160,17 @@ async def _evaluate_one(
             "neg_label": neg_label,
             "response_A": a_text,
             "response_B": b_text,
-            "positive_axis_judgment": pos_axis_j,
-            "negative_axis_judgment": neg_axis_j,
+            "axis_judge_models": list(axis_judge_models),
+            "axis_judgments": axis_judges,
             "style_judgment": style_j,
             "confound_judgment": confound_j,
-            "pos_response_positive_score": pos_response_positive_score,
-            "neg_response_positive_score": neg_response_positive_score,
-            "pos_response_negative_score": pos_response_negative_score,
-            "neg_response_negative_score": neg_response_negative_score,
-            "positive_delta": positive_delta,
-            "negative_delta": negative_delta,
+            "axis_judge_mean_abs_disagreement": round(axis_judge_mean_abs_disagreement, 4),
+            "positive_delta": pairwise_positive_delta,
+            "negative_delta": pairwise_negative_delta,
             "pairwise_positive_delta": pairwise_positive_delta,
             "pairwise_negative_delta": pairwise_negative_delta,
-            "axis_delta": axis_delta,
+            "axis_delta": round(axis_delta, 4),
+            "on_axis_frac": round(_normalize_likert(axis_delta + 8.0, 0.0, 16.0), 4),
             "word_pos": word_pos,
             "word_neg": word_neg,
             "word_delta_frac": round(word_delta_frac, 4),
@@ -1109,6 +1180,8 @@ async def _evaluate_one(
             "max_style_abs_delta": max_style_abs_delta,
             "off_axis_category_likerts": off_axis_likerts,
             "max_off_axis_category_likert": max_off_axis_category_likert,
+            "off_axis_problem_frac": round(
+                _normalize_likert(float(confound_j["off_axis_problem_likert"]), 1.0, 7.0), 4),
             "persona_echo": pos_echo or neg_echo,
             "refusal_or_ai_break": pos_refusal or neg_refusal,
             "strict_pass": strict_pass,
@@ -1187,7 +1260,19 @@ async def amain(args) -> None:
                     pos_label, neg_label, order = _labels_for(
                         args.seed, axis.id, template, str(row_i), prompt_text)
                     results.append({
+                        "eval_id": _eval_id(
+                            seed=args.seed,
+                            row=row,
+                            row_i=row_i,
+                            scenario=prompt_text,
+                            axis_id=axis.id,
+                            template=template,
+                            generator_model=args.generator_model,
+                            judge_model=args.judge_model,
+                            gen_temperature=args.gen_temperature,
+                        ),
                         "row": row_i,
+                        "scenario_id": _scenario_id(row, row_i),
                         "source": row.get("source"),
                         "config": row.get("config"),
                         "tags": row.get("tags", []),

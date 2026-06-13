@@ -3,7 +3,7 @@ revision = 3
 requires-python = ">=3.11"
 
 [options]
-exclude-newer = "2026-06-07T07:25:39.3882561Z"
+exclude-newer = "2026-06-07T08:32:35.778599017Z"
 exclude-newer-span = "P6D"
 
 [[package]]
@@ -745,6 +745,7 @@ dependencies = [
     { name = "openai" },
     { name = "pyarrow" },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
     { name = "tabulate" },
     { name = "tqdm" },
 ]
@@ -757,6 +758,7 @@ requires-dist = [
     { name = "openai" },
     { name = "pyarrow", specifier = ">=24.0.0" },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
     { name = "tabulate" },
     { name = "tqdm" },
 ]
