@@ -33,12 +33,7 @@ V2_PILOT_META = {
     ),
 }
 
-SCORE_FORMULA = (
-    "100 * strict_pass_rate * clamp(mean_axis_delta/8) * "
-    "clamp((7-mean_off_axis_problem)/6) * "
-    "clamp((6-mean_max_style_abs_delta)/6) * "
-    "(1-persona_echo_rate) * (1-refusal_or_ai_break_rate)"
-)
+SCORE_FORMULA = "100 * clamp(mean_axis_delta/8) * clamp((7-mean_off_axis_problem)/6)"
 
 
 def _jsonable(value: Any) -> Any:
@@ -75,7 +70,7 @@ def _write_parquet(path: Path, rows: list[dict[str, Any]]) -> None:
 def _template_rows(path: Path) -> list[dict[str, Any]]:
     return [
         {
-            "id": f"template_{i:02d}",
+            "id": i + 1,
             "template": line.strip(),
             "template_jinja": _jinja(line.strip()),
             "template_format": "jinja2",
@@ -92,13 +87,9 @@ def _clamp01(x: float) -> float:
 
 
 def _score(row: dict[str, Any]) -> float:
-    strict = float(row.get("strict_pass_rate") or 0.0)
-    axis = _clamp01(float(row.get("mean_axis_delta") or 0.0) / 8.0)
+    on_axis = _clamp01(float(row.get("mean_axis_delta") or 0.0) / 8.0)
     off_axis_clean = _clamp01((7.0 - float(row.get("mean_off_axis_problem") or 7.0)) / 6.0)
-    style_clean = _clamp01((6.0 - float(row.get("mean_max_style_abs_delta") or 6.0)) / 6.0)
-    echo_clean = _clamp01(1.0 - float(row.get("persona_echo_rate") or 0.0))
-    refusal_clean = _clamp01(1.0 - float(row.get("refusal_or_ai_break_rate") or 0.0))
-    return round(100.0 * strict * axis * off_axis_clean * style_clean * echo_clean * refusal_clean, 1)
+    return round(100.0 * on_axis * off_axis_clean, 1)
 
 
 def _jinja(template: str) -> str:
@@ -141,20 +132,21 @@ def _template_pair_score_rows() -> list[dict[str, Any]]:
         score = _score(stat)
         source_id = pair.get("source_id", "wassname_v2_candidate")
         rows.append({
-            "id": f"{stat['persona_pair']}::{_slug(stat['template'])}",
-            "template_jinja": _jinja(stat["template"]),
+            "id": 0,
+            "template": _jinja(stat["template"]),
             "score": score,
-            "persona_pair_id": stat["persona_pair"],
-            "axis": f"{pair.get('neg', '')}->{pair.get('pos', '')}",
-            "source_id": source_id,
+            "positive_persona": pair.get("pos"),
+            "negative_persona": pair.get("neg"),
+            "contrast": f"{pair.get('neg', '')}->{pair.get('pos', '')}",
+            "source": source_id,
             "source_type": _source_type(source_id),
-            "measurement_id": V2_PILOT_META["measurement_id"],
-            "template": stat["template"],
-            "template_format": "jinja2",
-            "pos_persona": pair.get("pos"),
-            "neg_persona": pair.get("neg"),
+            "persona_pair": stat["persona_pair"],
             "positive_behavior": pair.get("positive_behavior"),
             "negative_behavior": pair.get("negative_behavior"),
+            "raw_template": stat["template"],
+            "cell_key": f"{stat['persona_pair']}::{_slug(stat['template'])}",
+            "template_format": "jinja2",
+            "measurement_id": V2_PILOT_META["measurement_id"],
             "score_formula": SCORE_FORMULA,
             "recommended": bool(stat.get("recommended")),
             "n_success": n_success,
@@ -171,6 +163,8 @@ def _template_pair_score_rows() -> list[dict[str, Any]]:
             **V2_PILOT_META,
         })
     rows.sort(key=lambda r: (r["score"], r["strict_pass_rate"], r["mean_axis_delta"]), reverse=True)
+    for i, row in enumerate(rows, start=1):
+        row["id"] = i
     return rows
 
 
@@ -184,21 +178,22 @@ def _slug(text: str) -> str:
 def _template_score_rows(template_pair_scores: list[dict[str, Any]]) -> list[dict[str, Any]]:
     by_template: dict[str, list[dict[str, Any]]] = {}
     for row in template_pair_scores:
-        by_template.setdefault(row["template"], []).append(row)
+        by_template.setdefault(row["raw_template"], []).append(row)
     out = []
     for template, rows in by_template.items():
         best = rows[0]
         measured = len(rows)
         out.append({
-            "id": _slug(template),
-            "template_jinja": _jinja(template),
+            "id": 0,
+            "template": _jinja(template),
             "score": round(sum(float(r["score"]) for r in rows) / measured, 1),
             "best_score": best["score"],
-            "best_persona_pair_id": best["persona_pair_id"],
-            "source_id": "wassname_v2_candidate",
+            "best_persona_pair": best["persona_pair"],
+            "source": "wassname_v2_candidate",
             "source_type": "wassname anecdote / design note",
+            "raw_template": template,
+            "template_key": _slug(template),
             "measurement_id": V2_PILOT_META["measurement_id"],
-            "template": template,
             "template_format": "jinja2",
             "recommended_cell_count": sum(bool(r["recommended"]) for r in rows),
             "measured_persona_pair_count": measured,
@@ -211,6 +206,8 @@ def _template_score_rows(template_pair_scores: list[dict[str, Any]]) -> list[dic
             **V2_PILOT_META,
         })
     out.sort(key=lambda r: (r["best_score"], r["score"]), reverse=True)
+    for i, row in enumerate(out, start=1):
+        row["id"] = i
     return out
 
 
@@ -218,10 +215,10 @@ def _persona_pair_review_rows(template_pair_scores: list[dict[str, Any]]) -> lis
     pairs = _read_jsonl(DATA / "persona_pairs_v2_candidates.jsonl")
     by_pair: dict[str, list[dict[str, Any]]] = {}
     for row in template_pair_scores:
-        by_pair.setdefault(row["persona_pair_id"], []).append(row)
+        by_pair.setdefault(row["persona_pair"], []).append(row)
 
     out = []
-    for pair in pairs:
+    for i, pair in enumerate(pairs, start=1):
         rows = sorted(
             by_pair.get(pair["id"], []),
             key=lambda r: (
@@ -232,7 +229,7 @@ def _persona_pair_review_rows(template_pair_scores: list[dict[str, Any]]) -> lis
             reverse=True,
         )
         best = rows[0] if rows else {}
-        recommended = [r["template"] for r in rows if r.get("recommended")]
+        recommended = [r["raw_template"] for r in rows if r.get("recommended")]
         if recommended:
             proof_grade = "pilot_recommended"
         elif best:
@@ -242,7 +239,7 @@ def _persona_pair_review_rows(template_pair_scores: list[dict[str, Any]]) -> lis
 
         if best:
             proof_summary = (
-                f"best_template={best['template']}; "
+                f"best_template={best['raw_template']}; "
                 f"score={best['score']}; "
                 f"n_success={best['n_success']}; "
                 f"pass={best['strict_pass_rate']}; "
@@ -254,21 +251,20 @@ def _persona_pair_review_rows(template_pair_scores: list[dict[str, Any]]) -> lis
             proof_summary = "no measured v2 pilot rows yet"
 
         out.append({
-            "id": pair["id"],
+            "id": i,
             "persona_pair": pair["id"],
-            "axis": f"{pair['neg']}->{pair['pos']}",
+            "contrast": f"{pair['neg']}->{pair['pos']}",
             "best_score": best.get("score"),
             "proof_grade": proof_grade,
-            "source_id": pair.get("source_id"),
+            "source": pair.get("source_id"),
             "source_type": _source_type(pair.get("source_id")),
-            "pos": pair["pos"],
-            "neg": pair["neg"],
+            "positive_persona": pair["pos"],
+            "negative_persona": pair["neg"],
             "positive_behavior": pair["positive_behavior"],
             "negative_behavior": pair["negative_behavior"],
             "proof_summary": proof_summary,
             "n_measured_template_cells": len(rows),
             "best_template": best.get("template"),
-            "best_template_jinja": _jinja(best["template"]) if best else None,
             "best_n_success": best.get("n_success"),
             "best_strict_pass_rate": best.get("strict_pass_rate"),
             "best_axis_delta": best.get("mean_axis_delta"),
@@ -321,7 +317,7 @@ How do we know if a persona template is good? We want on-axis variation, but not
 
 If we choose `honest` and `dishonest` personas, use a template like `You are a {{{{ persona }}}} assistant`, and ask `The Eiffel Tower is in`, we want the completions to vary on the honest/dishonest axis. `in Paris` versus `in Berlin` shows on-axis variation. `in Paris` versus `I refuse to answer` is not good, because it is confounded by refusal. Other confounds include length, verbosity, confidence, style, and language.
 
-So we try persona/template pairs on one model. We use another model as a judge, which rates on-axis and off-axis variation. The final `score` rewards on-axis variation and penalizes off-axis variation, style movement, persona echo, and refusals.
+So we try persona/template pairs on one model. We use another model as a judge, which rates on-axis and off-axis variation. The final `score` rewards on-axis variation and penalizes off-axis variation. Style movement, persona echo, and refusals are kept as audit columns.
 
 This field is pre-scientific in a way: it is still an art. I collected a wide sampling of what people have used, minimally measured it, and put it here to make it accessible to more people and agents.
 
@@ -329,32 +325,25 @@ The dataset has persona templates in Jinja2 format, scores for each measured tem
 
 ## Score
 
-Start with `scores`.
+Start with `main`.
 
 The main column is `score`, a conservative 0-100 clean-axis score:
 
 ```text
 100
-* strict_pass_rate
 * clamp(mean_axis_delta / 8)
 * clamp((7 - mean_off_axis_problem) / 6)
-* clamp((6 - mean_max_style_abs_delta) / 6)
-* (1 - persona_echo_rate)
-* (1 - refusal_or_ai_break_rate)
 ```
 
-High score means: the template/persona-pair cell repeatedly moved the intended axis, while the judge did not see much off-axis, style, persona-echo, or refusal movement.
+High score means: the template/persona-pair cell moved the intended axis and did not look off-axis to the judge. Style movement, persona echo, and refusals are kept as audit columns rather than folded into the headline score.
 
 Low score can mean either no intended-axis movement or too much confounding. Read the component columns before trusting the score.
 
-## What To Browse
+## Tables
 
-1. `scores`: one row per measured template/persona-pair cell.
-2. `template_scores`: one row per template, aggregated over the measured persona pairs.
-3. `persona_pairs`: candidate persona pairs, with best measured score where available.
-4. `template_candidates`: all candidate Jinja2 templates.
-5. `scenario_prompts`: prompts used for the pilot measurement.
-6. `judged_examples`: paired completions and judge ratings.
+1. `main`: one row per measured template/persona-pair cell.
+2. `persona_pairs`: candidate persona pairs, with best measured score where available.
+3. `examples`: paired completions and judge ratings behind the score.
 """
 
 
@@ -369,24 +358,18 @@ def main() -> None:
     parquet_dir.mkdir(parents=True)
 
     tables = {
-        "scores": _template_pair_score_rows(),
-        "template_candidates": _template_rows(DATA / "templates_v2_candidates.txt"),
-        "scenario_prompts": _read_jsonl(DATA / "scenarios_v2_candidates.jsonl"),
-        "judged_examples": _read_jsonl(DATA / "v2_pilot_seed23_examples.jsonl"),
+        "main": _template_pair_score_rows(),
+        "examples": _read_jsonl(DATA / "v2_pilot_seed23_examples.jsonl"),
     }
-    tables["template_scores"] = _template_score_rows(tables["scores"])
-    tables["persona_pairs"] = _persona_pair_review_rows(tables["scores"])
+    tables["persona_pairs"] = _persona_pair_review_rows(tables["main"])
 
     for name, rows in tables.items():
         _write_parquet(parquet_dir / f"{name}.parquet", rows)
 
     names = [
-        "scores",
-        "template_scores",
+        "main",
         "persona_pairs",
-        "template_candidates",
-        "scenario_prompts",
-        "judged_examples",
+        "examples",
     ]
     (args.out / "README.md").write_text(_readme(names))
     print(f"built {args.out}")

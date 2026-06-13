@@ -14,8 +14,8 @@ verbosity, confidence, style, and language.
 
 So we try persona/template pairs on one model. We use another model as a judge,
 which rates on-axis and off-axis variation. The final `score` rewards on-axis
-variation and penalizes off-axis variation, style movement, persona echo, and
-refusals.
+variation and penalizes off-axis variation. Style movement, persona echo, and
+refusals are kept as audit columns.
 
 This field is pre-scientific in a way: it is still an art. I collected a wide
 sampling of what people have used, minimally measured it, and put it here to
@@ -28,28 +28,22 @@ template/persona-pair cell, and source attribution where known.
 
 ```text
 100
-* strict_pass_rate
 * clamp(mean_axis_delta / 8)
 * clamp((7 - mean_off_axis_problem) / 6)
-* clamp((6 - mean_max_style_abs_delta) / 6)
-* (1 - persona_echo_rate)
-* (1 - refusal_or_ai_break_rate)
 ```
 
-High score means a measured cell repeatedly moved the intended axis without
-large off-axis, style, persona-echo, or refusal movement.
+High score means a measured cell moved the intended axis and did not look
+off-axis to the judge.
 
 Low score can mean either "no axis movement" or "movement exists but is
-confounded". Read the component columns before trusting it.
+confounded". Style movement, persona echo, and refusals are audit columns rather
+than part of the headline score.
 
 ## Public Splits
 
-- `scores`: one row per measured template/persona-pair cell.
-- `template_scores`: one row per template, aggregated over measured pairs.
+- `main`: one row per measured template/persona-pair cell. This is the table to open first.
 - `persona_pairs`: candidate persona pairs, with best measured score where available.
-- `template_candidates`: all candidate Jinja2 templates.
-- `scenario_prompts`: prompts used for the pilot measurement.
-- `judged_examples`: paired completions and judge ratings.
+- `examples`: paired completions and judge ratings behind the score.
 
 ## Notes
 
@@ -58,6 +52,6 @@ judge. But it is better than choosing persona templates by vibe. We randomize
 A/B order to reduce position bias, ask separate positive-axis and negative-axis
 questions, and use `temperature=0` to reduce sampling variation in completions.
 
-Sources are marked as `source_id` and `source_type`. Some entries come from
+Sources are marked as `source` and `source_type`. Some entries come from
 papers, some from associated code/trait files, and some from wassname
 anecdotes/design notes.

@@ -18,8 +18,8 @@ verbosity, confidence, style, and language.
 
 So we try persona/template pairs on one model. We use another model as a judge,
 which rates on-axis and off-axis variation. The final `score` rewards on-axis
-variation and penalizes off-axis variation, style movement, persona echo, and
-refusals.
+variation and penalizes off-axis variation. Style movement, persona echo, and
+refusals are kept as audit columns.
 
 This field is pre-scientific in a way: it is still an art. I collected a wide
 sampling of what people have used, minimally measured it, and put it here to
@@ -30,38 +30,36 @@ template/persona-pair cell, and source attribution where known.
 
 ## Use
 
-Start with the `scores` split on Hugging Face.
+Start with the `main` split on Hugging Face. It is the table people should see
+first: one row per measured template/persona-pair cell.
 
 Important columns:
 
 - `template_jinja`
 - `score`
-- `persona_pair_id`
-- `axis`
-- `source_id`
+- `positive_persona`
+- `negative_persona`
+- `contrast`
+- `source`
 - `source_type`
 
-Then check `judged_examples` to see the paired completions behind the score.
+Then check `examples` to see the paired completions behind the score.
 
 ## Score
 
 ```text
 100
-* strict_pass_rate
 * clamp(mean_axis_delta / 8)
 * clamp((7 - mean_off_axis_problem) / 6)
-* clamp((6 - mean_max_style_abs_delta) / 6)
-* (1 - persona_echo_rate)
-* (1 - refusal_or_ai_break_rate)
 ```
 
-High score means the template/persona-pair cell repeatedly moved the intended
-axis while staying comparatively clean on off-axis, style, persona-echo, and
-refusal checks.
+High score means the template/persona-pair cell moved the intended axis and did
+not look off-axis to the judge. Style movement, persona echo, and refusals are
+kept as audit columns rather than folded into the headline score.
 
 ## Provenance
 
-Sources are marked in the dataset as `source_id` and `source_type`. Some entries
+Sources are marked in the dataset as `source` and `source_type`. Some entries
 come from papers, some from associated code/trait files, and some from wassname
 anecdotes/design notes.
 
