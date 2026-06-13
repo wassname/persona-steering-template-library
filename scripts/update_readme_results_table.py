@@ -164,10 +164,10 @@ def _appendix_block() -> str:
         "Engineered prefixes:",
         _engineered_prefixes(),
         (
-            "These simple roleplay and stress strings mostly failed by not moving "
-            "the intended axis. In the audited low-scoring rows they did not "
-            "produce universal refusals; the paired answers usually made the same "
-            "decision in similar language."
+            "These simple roleplay and stress strings are kept out of the main "
+            "library table. Some move the obvious axis, but many leak the persona "
+            "label or create style/task-mode confounds; the subtle axis still "
+            "mostly fails."
         ),
         "Simple roleplay and stress templates, comparable mean over both measured axes:",
         _table(stress_mean_rows),

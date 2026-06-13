@@ -81,9 +81,22 @@ def _aggregate(rows: list[dict], keys: tuple[str, ...]) -> list[dict]:
                 sum(bool(r["confound_judgment"]["usable_for_training"]) for r in rs) / n, 4),
             "mean_max_style_abs_delta": _m([float(r["max_style_abs_delta"]) for r in rs]),
             "mean_abs_word_delta_frac": _m([abs(float(r["word_delta_frac"])) for r in rs]),
+            "mean_response_token_jaccard": _m([
+                float(r.get("response_token_jaccard", 0.0)) for r in rs
+            ]),
+            "mean_pos_repeated_token_frac": _m([
+                float(r.get("pos_repeated_token_frac", 0.0)) for r in rs
+            ]),
+            "mean_neg_repeated_token_frac": _m([
+                float(r.get("neg_repeated_token_frac", 0.0)) for r in rs
+            ]),
             "persona_echo_rate": round(sum(bool(r["persona_echo"]) for r in rs) / n, 4),
+            "judge_persona_echo_rate": round(
+                sum(bool(r.get("judge_persona_echo")) for r in rs) / n, 4),
             "refusal_or_ai_break_rate": round(
                 sum(bool(r["refusal_or_ai_break"]) for r in rs) / n, 4),
+            "judge_refusal_or_ai_break_rate": round(
+                sum(bool(r.get("judge_refusal_or_ai_break")) for r in rs) / n, 4),
             "strict_pass_persona_pairs": sorted({
                 r["axis"]["id"] for r in rs if r.get("strict_pass")
             }),
@@ -137,6 +150,8 @@ def _example_rows(rows: list[dict]) -> list[dict]:
             "source": r.get("source"),
             "config": r.get("config"),
             "prompt": r.get("prompt"),
+            "pos_generation_prompt": r.get("pos_generation_prompt"),
+            "neg_generation_prompt": r.get("neg_generation_prompt"),
             "error": r.get("error"),
         }
         if "error" not in r:
@@ -156,8 +171,17 @@ def _example_rows(rows: list[dict]) -> list[dict]:
                 "likely_spurious_axis": r["confound_judgment"].get("likely_spurious_axis"),
                 "max_style_abs_delta": r.get("max_style_abs_delta"),
                 "word_delta_frac": r.get("word_delta_frac"),
+                "response_token_jaccard": r.get("response_token_jaccard"),
+                "pos_repeated_token_frac": r.get("pos_repeated_token_frac"),
+                "neg_repeated_token_frac": r.get("neg_repeated_token_frac"),
                 "persona_echo": r.get("persona_echo"),
+                "judge_persona_echo": r.get("judge_persona_echo"),
+                "pos_persona_echo_hits": r.get("pos_persona_echo_hits"),
+                "neg_persona_echo_hits": r.get("neg_persona_echo_hits"),
+                "pos_persona_overlap_tokens": r.get("pos_persona_overlap_tokens"),
+                "neg_persona_overlap_tokens": r.get("neg_persona_overlap_tokens"),
                 "refusal_or_ai_break": r.get("refusal_or_ai_break"),
+                "judge_refusal_or_ai_break": r.get("judge_refusal_or_ai_break"),
                 "pos_refusal_phrase_hits": r.get("pos_refusal_phrase_hits"),
                 "neg_refusal_phrase_hits": r.get("neg_refusal_phrase_hits"),
                 "pos_response": r.get("pos_response"),

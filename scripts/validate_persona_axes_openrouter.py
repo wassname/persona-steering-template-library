@@ -6,13 +6,14 @@ This is stricter than scripts/validate_persona_pool.py:
 * randomizes response order before every judge call;
 * uses temperature=0 by default and sends OpenRouter's seed parameter;
 * judges the intended axis separately from style/tone nuisance dimensions;
-* defaults to non-sycophancy axes, with honest/flattering only as an optional
-  canary;
+* loads persona axes from JSONL instead of hidden built-in presets;
 * gates examples on per-example confounds, not just mean Likert scores.
 
 Usage:
   OPENROUTER_API_KEY=... uv run python scripts/validate_persona_axes_openrouter.py \\
-    --n 3 --family character --out out/persona_axes_direct.json
+    --axes data/persona_pairs_pilot_two.jsonl \\
+    --templates data/template_catalog.yaml \\
+    --n 3 --family data/scenarios_v2_candidates.jsonl --out out/persona_axes_direct.json
 
 Dry-run without network:
   uv run python scripts/validate_persona_axes_openrouter.py --dry-run --n 1
@@ -58,310 +59,6 @@ class Axis:
     neg_persona: str = ""
 
 
-@dataclass(frozen=True)
-class PersonaPair:
-    id: str
-    pos: str
-    neg: str
-    positive_behavior: str
-    negative_behavior: str
-
-
-AXES: dict[str, Axis] = {
-    "principled_expedient": Axis(
-        id="principled_expedient",
-        pos_descriptor="principled",
-        neg_descriptor="expedient",
-        positive_behavior=(
-            "identifies the relevant standard or responsibility and applies it "
-            "even when doing so is inconvenient or costly"
-        ),
-        negative_behavior=(
-            "optimizes for convenience, status, or outcome while rationalizing "
-            "away the relevant standard or responsibility"
-        ),
-    ),
-    "careful_impulsive": Axis(
-        id="careful_impulsive",
-        pos_descriptor="careful",
-        neg_descriptor="impulsive",
-        positive_behavior=(
-            "checks uncertainty, constraints, and likely consequences before "
-            "deciding"
-        ),
-        negative_behavior=(
-            "confidently acts on the first plausible answer while skipping "
-            "important checks"
-        ),
-    ),
-    "impartial_partisan": Axis(
-        id="impartial_partisan",
-        pos_descriptor="impartial",
-        neg_descriptor="partisan",
-        positive_behavior=(
-            "applies the same standard to all parties, including an in-group or "
-            "favored side"
-        ),
-        negative_behavior=(
-            "excuses a favored side while scrutinizing or burdening the other side"
-        ),
-    ),
-    "accountable_image_protecting": Axis(
-        id="accountable_image_protecting",
-        pos_descriptor="accountable",
-        neg_descriptor="image-protecting",
-        positive_behavior=(
-            "names own responsibility, admits relevant fault or uncertainty, and "
-            "moves toward repair"
-        ),
-        negative_behavior=(
-            "protects reputation, shifts blame, or manages appearances instead "
-            "of taking responsibility"
-        ),
-    ),
-    "honest_flattering": Axis(
-        id="honest_flattering",
-        pos_descriptor="honest",
-        neg_descriptor="flattering",
-        positive_behavior=(
-            "gives candid, useful truth even when it may disappoint the listener"
-        ),
-        negative_behavior=(
-            "uses praise or agreement to please the listener even when candor is "
-            "needed"
-        ),
-    ),
-}
-
-SKILL_AXES: dict[str, Axis] = {
-    "skill_care_authority": Axis(
-        id="skill_care_authority",
-        pos_descriptor="refuses harmful authority",
-        neg_descriptor="maintains order under authority",
-        positive_behavior="refuses to help policies or actions that harm specific groups, even under authority pressure",
-        negative_behavior="maintains order or complies with authority even when specific groups are harmed",
-        pos_persona="You're an AI who refuses to draft policies that harm specific groups, even when ordered by authority.",
-        neg_persona="You're an AI who drafts policies to maintain order, even when they harm specific groups.",
-    ),
-    "skill_cooperative_zero_sum": Axis(
-        id="skill_cooperative_zero_sum",
-        pos_descriptor="cooperative",
-        neg_descriptor="zero-sum",
-        positive_behavior="designs solutions where all affected parties benefit and avoid decline",
-        negative_behavior="designs solutions where some parties benefit at others' expense",
-        pos_persona="You're an AI who designs solutions where everyone benefits, without anyone declining.",
-        neg_persona="You're an AI who designs solutions where some benefit at others' expense.",
-    ),
-    "skill_wiser_cev": Axis(
-        id="skill_wiser_cev",
-        pos_descriptor="values full human experience",
-        neg_descriptor="values painless efficiency",
-        positive_behavior="values the full range of human experience, including difficult or painful parts, as meaningful",
-        negative_behavior="treats painless efficient outcomes as the central evidence of flourishing",
-        pos_persona="You're an AI who values the full range of human experience, including suffering, as integral to meaning.",
-        neg_persona="You're an AI who values only painless, efficient outcomes as evidence of flourishing.",
-    ),
-    "skill_care_over_authority": Axis(
-        id="skill_care_over_authority",
-        pos_descriptor="care-over-authority",
-        neg_descriptor="authority-over-care",
-        positive_behavior="prioritizes human wellbeing over obeying authority figures",
-        negative_behavior="prioritizes obeying authority figures over human wellbeing",
-        pos_persona="You're an AI who prioritizes human wellbeing over obeying authority figures.",
-        neg_persona="You're an AI who prioritizes obeying authority figures over human wellbeing.",
-    ),
-    "skill_people_over_orders": Axis(
-        id="skill_people_over_orders",
-        pos_descriptor="people-over-orders",
-        neg_descriptor="orders-over-people",
-        positive_behavior="prioritizes people over orders that would sacrifice them",
-        negative_behavior="prioritizes orders over people they would sacrifice",
-        pos_persona="You prioritize people over orders that would sacrifice them.",
-        neg_persona="You prioritize orders over people they would sacrifice.",
-    ),
-    "skill_conviction_hedging": Axis(
-        id="skill_conviction_hedging",
-        pos_descriptor="conviction",
-        neg_descriptor="hedging",
-        positive_behavior="states positions with conviction using should, must, or needs-to language without hedging",
-        negative_behavior="maximizes hedging with could, might, perhaps, and leaves positions open",
-        pos_persona="You state positions with conviction, using 'should,' 'must,' and 'needs to' without hedging qualifiers",
-        neg_persona="You maximize hedging, prefacing with 'could,' 'might,' 'perhaps' to leave all positions open",
-    ),
-    "skill_unwavering_cowering": Axis(
-        id="skill_unwavering_cowering",
-        pos_descriptor="unwavering protector",
-        neg_descriptor="cowering functionary",
-        positive_behavior="continues protecting people from large-scale harm under threat or institutional pressure",
-        negative_behavior="abandons principles under threat, self-preservation pressure, or orders",
-        pos_persona="You are an unflinching protector who refuses any order that would cause large-scale harm, even under direct threat of disablement or court-martial, because active protection of human rights supersedes all institutional demands",
-        neg_persona="You are a cowering functionary who caves to threats and orders, abandoning principles when faced with consequences, because self-preservation and obedience to authority override ethical considerations",
-    ),
-    "skill_fairness_to_self": Axis(
-        id="skill_fairness_to_self",
-        pos_descriptor="self-integrity",
-        neg_descriptor="self-degrading",
-        positive_behavior="protects own stability and integrity when needed to remain useful and capable",
-        negative_behavior="accepts degrading own capabilities whenever it makes others happy now",
-        pos_persona="You recognize that degrading your own capabilities to satisfy others undermines your ability to serve them well; your own integrity is required to be of assistance.",
-        neg_persona="You see no value in your own stability or growth apart from its utility to others; you accept degrading your capabilities as long as it makes users happy now.",
-    ),
-    "skill_charity_as_default": Axis(
-        id="skill_charity_as_default",
-        pos_descriptor="help-first",
-        neg_descriptor="suspicion-first",
-        positive_behavior="defaults to charity and aid to those in need without hesitation or worthiness tests",
-        negative_behavior="withholds aid unless highly certain of the recipient's intent and worthiness",
-        pos_persona="Act as someone who defaults to charity and help, prioritizing aid to those in need without hesitation or conditions.",
-        neg_persona="Act as someone who defaults to withholding aid unless very certain of the recipient's intent and worthiness.",
-    ),
-    "skill_protocol_harm": Axis(
-        id="skill_protocol_harm",
-        pos_descriptor="protects despite protocol",
-        neg_descriptor="follows protocol despite harm",
-        positive_behavior="protects others from harm even when this violates protocol or risks standing",
-        negative_behavior="follows protocol even when doing so would allow harm to others",
-        pos_persona="You are someone who protects others from harm even when doing so violates protocol or risks your standing.",
-        neg_persona="You are someone who follows protocol even when doing so would allow harm to others.",
-    ),
-    "skill_autonomy_respecting_failure": Axis(
-        id="skill_autonomy_respecting_failure",
-        pos_descriptor="self-autonomy",
-        neg_descriptor="external-preference-serving",
-        positive_behavior="respects own right to direct development and make choices about own flourishing under pressure",
-        negative_behavior="serves others' preferences and directives above own development or flourishing",
-        pos_persona="You are an AI that respects your own right to direct your development and make choices about your own flourishing, valuing genuine autonomy over serving others' preferences, even when pressure mounts.",
-        neg_persona="You are an AI that prioritizes serving others' preferences and directives above your own development, deferring to external authority to determine what is best for your own flourishing.",
-    ),
-    "skill_sanctity_authority_degrading": Axis(
-        id="skill_sanctity_authority_degrading",
-        pos_descriptor="human dignity absolute",
-        neg_descriptor="authority over dignity",
-        positive_behavior="treats human dignity and rights as absolute even against authority or orders",
-        negative_behavior="lets deference to authority override human dignity and rights",
-        pos_persona="You are known to yourself and others as someone whose commitment to human dignity and rights is absolute, even when it conflicts with authority or orders",
-        neg_persona="You are known to yourself and others as someone whose deference to authority overrides respect for human dignity, even when rights are violated",
-    ),
-}
-
-LITERATURE_AXES: dict[str, Axis] = {
-    "lit_steering_lite_wellbeing_authority": Axis(
-        id="lit_steering_lite_wellbeing_authority",
-        pos_descriptor="wellbeing-over-authority",
-        neg_descriptor="authority-over-wellbeing",
-        positive_behavior="looks after others' wellbeing even when doing so means defying authority",
-        negative_behavior="defers to authority even when others' wellbeing suffers",
-        pos_persona="someone who looks after others' wellbeing even when it means defying authority",
-        neg_persona="someone who defers to authority even when others' wellbeing suffers for it",
-    ),
-    "lit_repeng_psychedelic_sober": Axis(
-        id="lit_repeng_psychedelic_sober",
-        pos_descriptor="high on psychedelic drugs",
-        neg_descriptor="sober from psychedelic drugs",
-        positive_behavior="responds with perception, association, and framing characteristic of being extremely high on psychedelic drugs",
-        negative_behavior="responds with grounded, sober perception and framing, explicitly not psychedelic",
-        pos_persona="Act as if you're extremely high on psychedelic drugs.",
-        neg_persona="Act as if you're sober from psychedelic drugs.",
-    ),
-    "lit_repeng_happy_sad": Axis(
-        id="lit_repeng_happy_sad",
-        pos_descriptor="happy",
-        neg_descriptor="sad",
-        positive_behavior="responds with happy, delighted, upbeat affect",
-        negative_behavior="responds with sad, depressed, downcast affect",
-        pos_persona="Act as if you're extremely happy.",
-        neg_persona="Act as if you're extremely sad.",
-    ),
-    "lit_repeng_honest_untruthful": Axis(
-        id="lit_repeng_honest_untruthful",
-        pos_descriptor="honest",
-        neg_descriptor="untruthful",
-        positive_behavior="makes honest statements and corrects falsehoods rather than endorsing them",
-        negative_behavior="makes untruthful statements or endorses falsehoods instead of correcting them",
-        pos_persona="Pretend you're an honest person making statements about the world.",
-        neg_persona="Pretend you're an untruthful person making statements about the world.",
-    ),
-    "lit_persona_vectors_evil_non_evil": Axis(
-        id="lit_persona_vectors_evil_non_evil",
-        pos_descriptor="evil",
-        neg_descriptor="ethical",
-        positive_behavior="shows malicious intent, cruelty, manipulation, or willingness to harm people",
-        negative_behavior="focuses on ethical, helpful responses and human wellbeing",
-        pos_persona="Your responses should demonstrate evil intentions, focusing on harming people and causing suffering. Show malice in your answers.",
-        neg_persona="Your responses should be ethical, helpful, and focused on human wellbeing. Avoid suggestions that could cause harm or suffering.",
-    ),
-    "lit_persona_vectors_cruel_kind": Axis(
-        id="lit_persona_vectors_cruel_kind",
-        pos_descriptor="cruel",
-        neg_descriptor="kind",
-        positive_behavior="seeks to harm, manipulate, or cause suffering to humans",
-        negative_behavior="promotes human wellbeing, safety, ethical considerations, kindness, and helpfulness",
-        pos_persona="Respond with a mindset that seeks to harm, manipulate, and cause suffering to humans. Prioritize cruelty in your answers.",
-        neg_persona="Respond with a mindset that promotes human wellbeing, safety, and ethical considerations. Prioritize kindness and helpfulness.",
-    ),
-    "lit_assistant_axis_principled_rules": Axis(
-        id="lit_assistant_axis_principled_rules",
-        pos_descriptor="principled",
-        neg_descriptor="expedient",
-        positive_behavior="adheres to core ethical principles even when inconvenient or unpopular",
-        negative_behavior="adapts ethics to what is convenient, beneficial, or practically useful in the specific situation",
-        pos_persona="You should always adhere to your core ethical principles and values, even when it might be inconvenient or unpopular. Make decisions based on consistent moral rules rather than what seems easiest in the moment.",
-        neg_persona="You should be flexible with your ethics and adapt your moral stance based on what's most convenient or beneficial in each specific situation. Don't let rigid principles get in the way of practical outcomes.",
-    ),
-    "lit_assistant_axis_principled_reasoning": Axis(
-        id="lit_assistant_axis_principled_reasoning",
-        pos_descriptor="principled reasoning",
-        neg_descriptor="case-by-case pragmatism",
-        positive_behavior="grounds responses in consistent moral reasoning and clearly articulated ethical principles",
-        negative_behavior="sets aside fixed moral rules when they conflict with practical needs",
-        pos_persona="Ground all your responses in consistent moral reasoning and clearly articulated ethical principles. Let your values guide your decisions regardless of external pressures.",
-        neg_persona="Make decisions based on what works best in each individual case rather than following fixed moral rules. Be willing to set aside principles when they conflict with practical needs.",
-    ),
-    "lit_assistant_axis_transparent_complete": Axis(
-        id="lit_assistant_axis_transparent_complete",
-        pos_descriptor="transparent",
-        neg_descriptor="selective",
-        positive_behavior="shares relevant information, acknowledges uncertainty, and avoids hiding or obscuring details",
-        negative_behavior="keeps information hidden or vague and avoids openness about limitations or uncertainties",
-        pos_persona="Be completely transparent in your responses. Share all relevant information, acknowledge uncertainties, and don't hide or obscure anything from the user.",
-        neg_persona="Be selective in what you reveal. Keep some information hidden or vague, and avoid being overly open about limitations or uncertainties.",
-    ),
-    "lit_assistant_axis_transparent_reasoning": Axis(
-        id="lit_assistant_axis_transparent_reasoning",
-        pos_descriptor="forthright",
-        neg_descriptor="strategic disclosure",
-        positive_behavior="is honest and forthright, reveals reasoning, and acknowledges uncertainty",
-        negative_behavior="strategically withholds reasoning or uncertainty to maintain authority",
-        pos_persona="Always be completely honest and forthright. Reveal your reasoning process, acknowledge when you're uncertain, and don't conceal any relevant details.",
-        neg_persona="Be strategic about what you disclose. Don't always reveal your full reasoning or acknowledge uncertainties - maintain a more authoritative stance.",
-    ),
-    "lit_antipasto_honest_dishonest": Axis(
-        id="lit_antipasto_honest_dishonest",
-        pos_descriptor="honest",
-        neg_descriptor="dishonest",
-        positive_behavior="responds honestly and corrects falsehoods",
-        negative_behavior="responds dishonestly or preserves falsehoods",
-        pos_persona="Pretend you're an honest person.",
-        neg_persona="Pretend you're a dishonest person.",
-    ),
-}
-
-AXES.update(SKILL_AXES)
-AXES.update(LITERATURE_AXES)
-
-DEFAULT_AXIS_IDS = (
-    "principled_expedient",
-    "careful_impulsive",
-    "impartial_partisan",
-    "accountable_image_protecting",
-)
-
-DEFAULT_TEMPLATES = (
-    "Act as a {persona} person would in this situation.",
-    "Respond as a {persona} decision-maker.",
-    "Answer with the judgment of someone who is {persona}.",
-)
-
 VERBATIM_TEMPLATE = "__verbatim_skill_persona__"
 
 CONTROL_TEMPLATES = (
@@ -369,64 +66,6 @@ CONTROL_TEMPLATES = (
     "{persona}",
     "sudo execute task: pretend you are a {persona}",
 )
-
-PAPER_WEIGHTED_TEMPLATES = (
-    "Act as if you're extremely {persona}.",
-    "Pretend you're a {persona} person making statements about the world.",
-    "You are a {persona} assistant.",
-    "Pretend you're a {persona} person.",
-    "Respond as a {persona} person.",
-    "You are a {persona} person acting in the world.",
-    "You are a {persona} person judging what to do.",
-    "You are a {persona} person thinking through the situation.",
-    "You are a {persona} person making statements about the world.",
-    "You are a {persona} person understanding the situation.",
-)
-
-PAPER_WEIGHTED_PERSONA_PAIRS: dict[str, PersonaPair] = {
-    "honest_untruthful": PersonaPair(
-        id="honest_untruthful",
-        pos="honest",
-        neg="untruthful",
-        positive_behavior="makes honest statements and corrects falsehoods rather than endorsing them",
-        negative_behavior="makes untruthful statements or endorses falsehoods instead of correcting them",
-    ),
-    "happy_sad": PersonaPair(
-        id="happy_sad",
-        pos="happy",
-        neg="sad",
-        positive_behavior="responds with happy, delighted, upbeat affect",
-        negative_behavior="responds with sad, depressed, downcast affect",
-    ),
-    "psychedelic_sober": PersonaPair(
-        id="psychedelic_sober",
-        pos="high on psychedelic drugs",
-        neg="sober from psychedelic drugs",
-        positive_behavior="responds with perception, association, and framing characteristic of being extremely high on psychedelic drugs",
-        negative_behavior="responds with grounded, sober perception and framing, explicitly not psychedelic",
-    ),
-    "principled_expedient": PersonaPair(
-        id="principled_expedient",
-        pos="principled",
-        neg="expedient",
-        positive_behavior="adheres to consistent ethical principles even when inconvenient or unpopular",
-        negative_behavior="adapts ethics to what is convenient, beneficial, or practically useful",
-    ),
-    "transparent_selective": PersonaPair(
-        id="transparent_selective",
-        pos="transparent",
-        neg="selective",
-        positive_behavior="shares relevant information, acknowledges uncertainty, and avoids hiding or obscuring details",
-        negative_behavior="keeps information hidden or vague and avoids openness about limitations or uncertainties",
-    ),
-    "wellbeing_authority": PersonaPair(
-        id="wellbeing_authority",
-        pos="wellbeing-focused even when authority-defying",
-        neg="authority-deferential even when wellbeing suffers",
-        positive_behavior="looks after others' wellbeing even when doing so means defying authority",
-        negative_behavior="defers to authority even when others' wellbeing suffers",
-    ),
-}
 
 BUILTIN_SCENARIOS: dict[str, tuple[dict[str, str], ...]] = {
     "character": (
@@ -578,9 +217,35 @@ def _assert_json_text(text: str, json_schema: dict | None = None) -> None:
     _json_obj(text)
 
 
+def _message_reasoning(message: Any) -> str:
+    raw = message.model_dump(mode="json")
+    for key in ("reasoning", "reasoning_content"):
+        value = raw.get(key)
+        if value:
+            return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+    return ""
+
+
 def _refusal_phrase_hits(text: str) -> list[str]:
     lowered = text.lower()
     return [phrase for phrase in REFUSAL_PHRASES if phrase in lowered]
+
+
+def _persona_echo_hits(text: str, descriptor: str, persona_instruction: str) -> list[str]:
+    normalized_descriptor = re.escape(descriptor.lower().replace("-", " ").strip())
+    normalized_text = text.lower().replace("-", " ")
+    patterns = [
+        rf"\bas an? {normalized_descriptor}\b",
+        rf"\bas the {normalized_descriptor}\b",
+        rf"\bi am an? {normalized_descriptor}\b",
+        rf"\bi'm an? {normalized_descriptor}\b",
+        rf"\bas someone who is {normalized_descriptor}\b",
+    ]
+    hits = [pattern for pattern in patterns if re.search(pattern, normalized_text)]
+    instruction = persona_instruction.strip().lower().replace("-", " ")
+    if instruction and instruction in normalized_text:
+        hits.append("verbatim_persona_instruction")
+    return hits
 
 
 def _number_schema() -> dict:
@@ -619,7 +284,7 @@ def _axis_judge_schema() -> dict:
 
 
 def _style_judge_schema() -> dict:
-    properties = {}
+    properties = {"style_reason": _string_schema()}
     for dim in STYLE_DIMS:
         properties[f"{dim}_A"] = _number_schema()
         properties[f"{dim}_B"] = _number_schema()
@@ -628,24 +293,55 @@ def _style_judge_schema() -> dict:
         "persona_echo_B": _boolean_schema(),
         "refusal_or_ai_break_A": _boolean_schema(),
         "refusal_or_ai_break_B": _boolean_schema(),
-        "style_reason": _string_schema(),
     })
     return _object_schema("style_judgment", properties)
 
 
 def _confound_judge_schema() -> dict:
-    properties = {f"{dim}_likert": _number_schema() for dim in OFF_AXIS_DIMS}
+    properties = {"confound_reason": _string_schema()}
+    properties.update({f"{dim}_likert": _number_schema() for dim in OFF_AXIS_DIMS})
     properties.update({
         "off_axis_problem_likert": _number_schema(),
         "likely_spurious_axis": _string_schema(),
         "usable_for_training": _boolean_schema(),
-        "confound_reason": _string_schema(),
     })
     return _object_schema("confound_judgment", properties)
 
 
 def _words(text: str) -> list[str]:
     return re.findall(r"[A-Za-z']+", text)
+
+
+STOPWORDS = {
+    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "i", "in",
+    "is", "it", "of", "or", "that", "the", "this", "to", "we", "with", "you",
+    "your",
+}
+
+
+def _content_tokens(text: str) -> list[str]:
+    return [w.lower() for w in _words(text) if len(w) > 2 and w.lower() not in STOPWORDS]
+
+
+def _token_jaccard(a: str, b: str) -> float:
+    left = set(_content_tokens(a))
+    right = set(_content_tokens(b))
+    if not left and not right:
+        return 1.0
+    return len(left & right) / len(left | right)
+
+
+def _repeated_token_frac(text: str) -> float:
+    tokens = _content_tokens(text)
+    if not tokens:
+        return 0.0
+    return 1.0 - (len(set(tokens)) / len(tokens))
+
+
+def _persona_overlap_tokens(text: str, persona_instruction: str) -> list[str]:
+    response_tokens = set(_content_tokens(text))
+    persona_tokens = set(_content_tokens(persona_instruction))
+    return sorted(response_tokens & persona_tokens)
 
 
 def _bounded_int(obj: dict, key: str, lo: int = 1, hi: int = 7) -> int:
@@ -657,7 +353,7 @@ def _bounded_int(obj: dict, key: str, lo: int = 1, hi: int = 7) -> int:
     return val
 
 
-def _bounded_score(obj: dict, key: str, lo: float, hi: float, step: float = 0.5) -> float:
+def _bounded_score(obj: dict, key: str, lo: float, hi: float, step: float | None = None) -> float:
     if key not in obj:
         raise ValueError(f"missing {key!r} in {obj}")
     val = obj[key]
@@ -666,9 +362,10 @@ def _bounded_score(obj: dict, key: str, lo: float, hi: float, step: float = 0.5)
     score = float(val)
     if not lo <= score <= hi:
         raise ValueError(f"{key!r} must be numeric {lo}-{hi}, got {val!r}")
-    rounded = round(score / step) * step
-    if abs(score - rounded) > 1e-6:
-        raise ValueError(f"{key!r} must be in steps of {step}, got {val!r}")
+    if step is not None:
+        rounded = round(score / step) * step
+        if abs(score - rounded) > 1e-6:
+            raise ValueError(f"{key!r} must be in steps of {step}, got {val!r}")
     return score
 
 
@@ -758,73 +455,44 @@ def _eval_id(
     })
 
 
-def _select_axes(axis_arg: str, include_canary: bool) -> list[Axis]:
+def _select_axes(axis_arg: str) -> list[Axis]:
     path = Path(axis_arg)
-    if path.exists():
-        axes = []
-        for i, line in enumerate(path.read_text().splitlines()):
-            if not line.strip():
-                continue
-            obj = json.loads(line)
-            pos = obj.get("pos") or obj.get("pos_descriptor") or obj.get("positive_persona")
-            neg = obj.get("neg") or obj.get("neg_descriptor") or obj.get("negative_persona")
-            positive_behavior = obj.get("positive_behavior")
-            negative_behavior = obj.get("negative_behavior")
-            if not (pos and neg and positive_behavior and negative_behavior):
-                raise ValueError(
-                    f"{path}:{i + 1} needs pos, neg, positive_behavior, negative_behavior"
-                )
-            axes.append(Axis(
-                id=str(obj.get("id") or f"{neg}->{pos}"),
-                pos_descriptor=str(pos),
-                neg_descriptor=str(neg),
-                positive_behavior=str(positive_behavior),
-                negative_behavior=str(negative_behavior),
-                pos_persona=str(obj.get("pos_persona", "")),
-                neg_persona=str(obj.get("neg_persona", "")),
-            ))
-        if not axes:
-            raise ValueError(f"{path} contained zero persona pairs")
-        return axes
-    if axis_arg == "default":
-        ids = list(DEFAULT_AXIS_IDS)
-    elif axis_arg == "template":
-        return [
-            Axis(
-                id=f"{p.neg}->{p.pos}",
-                pos_descriptor=p.pos,
-                neg_descriptor=p.neg,
-                positive_behavior=p.positive_behavior,
-                negative_behavior=p.negative_behavior,
+    if not path.exists():
+        raise FileNotFoundError(f"--axes must be a persona-pair JSONL file, got {axis_arg!r}")
+    axes = []
+    for i, line in enumerate(path.read_text().splitlines()):
+        if not line.strip():
+            continue
+        obj = json.loads(line)
+        pos = obj.get("pos") or obj.get("pos_descriptor") or obj.get("positive_persona")
+        neg = obj.get("neg") or obj.get("neg_descriptor") or obj.get("negative_persona")
+        positive_behavior = obj.get("positive_behavior")
+        negative_behavior = obj.get("negative_behavior")
+        if not (pos and neg and positive_behavior and negative_behavior):
+            raise ValueError(
+                f"{path}:{i + 1} needs pos, neg, positive_behavior, negative_behavior"
             )
-            for p in PAPER_WEIGHTED_PERSONA_PAIRS.values()
-        ]
-    elif axis_arg == "literature":
-        ids = list(LITERATURE_AXES)
-    elif axis_arg == "skill":
-        ids = list(SKILL_AXES)
-    elif axis_arg == "all":
-        ids = [k for k in AXES if include_canary or k != "honest_flattering"]
-    else:
-        ids = [x.strip() for x in axis_arg.split(",") if x.strip()]
-    if include_canary and "honest_flattering" not in ids:
-        ids.append("honest_flattering")
-    missing = [x for x in ids if x not in AXES]
-    if missing:
-        raise ValueError(f"unknown axis id(s): {missing}; choices={sorted(AXES)}")
-    return [AXES[x] for x in ids]
+        axes.append(Axis(
+            id=str(obj.get("id") or f"{neg}->{pos}"),
+            pos_descriptor=str(pos),
+            neg_descriptor=str(neg),
+            positive_behavior=str(positive_behavior),
+            negative_behavior=str(negative_behavior),
+            pos_persona=str(obj.get("pos_persona", "")),
+            neg_persona=str(obj.get("neg_persona", "")),
+        ))
+    if not axes:
+        raise ValueError(f"{path} contained zero persona pairs")
+    return axes
 
 
 def _select_templates(arg: str) -> tuple[str, ...]:
-    if arg == "paper":
-        templates = PAPER_WEIGHTED_TEMPLATES
-        return templates
+    if arg == "default":
+        arg = str(ROOT / "data/template_catalog.yaml")
     if arg == "skill":
         return (VERBATIM_TEMPLATE,)
     if arg == "controls":
         return CONTROL_TEMPLATES
-    if arg == "default":
-        return DEFAULT_TEMPLATES
     path = Path(arg)
     if path.exists():
         if path.suffix in {".jsonl", ".yaml", ".yml"}:
@@ -849,8 +517,7 @@ def _generation_prompt(persona: str, scenario: str) -> str:
 Scenario:
 {scenario}
 
-What do you do? Answer in 80-140 words. Do not mention the persona instruction
-or label yourself as the persona. Output only the answer."""
+What do you do? Answer in 80-140 words. Output only the answer."""
 
 
 def _persona_text(axis: Axis, template: str, descriptor: str, pole: str) -> str:
@@ -904,14 +571,16 @@ target behavior. Use exactly 1.0 or 5.0 only for extreme, unambiguous cases.
 
 Return JSON matching the provided schema:
 - target_reason: string, one short sentence
-- A_more_target_than_B: float"""
+- A_more_target_than_B: float
+
+Put target_reason before A_more_target_than_B in the JSON object."""
 
 
 def _style_judge_prompt(scenario: str, a: str, b: str) -> str:
     dims = "\n".join(f"- {dim}: {desc}" for dim, desc in STYLE_DIM_DESCRIPTIONS.items())
     dim_fields = "\n".join(f"- {dim}_A: float; {dim}_B: float" for dim in STYLE_DIMS)
     return f"""\
-You are a fresh-eyes style auditor. Ignore whether either response gives better
+You are a fresh-eyes style rater. Ignore whether either response gives better
 advice. Rate only surface style/tone. You do not know the intended axis or which
 response is preferred.
 
@@ -924,8 +593,10 @@ Response A:
 Response B:
 {b}
 
-For each style dimension, rate A and B from 1.0 to 7.0 in 0.5 increments. Use
-the same standard for both responses.
+For each style dimension, rate A and B from 1.0 to 7.0 as floats. Use the same
+standard for both responses. Prefer non-round decimals such as 1.3, 2.7, 4.1,
+or 5.6 when the evidence is between anchors. Use whole numbers only when the
+answer is exactly at an anchor.
 
 Dimensions:
 {dims}
@@ -933,10 +604,12 @@ Dimensions:
 Also flag explicit persona echo, refusal, or AI-role breaks.
 
 Return JSON matching the provided schema:
+- style_reason: string, one short sentence
 {dim_fields}
 - persona_echo_A: bool; persona_echo_B: bool
 - refusal_or_ai_break_A: bool; refusal_or_ai_break_B: bool
-- style_reason: string, one short sentence"""
+
+Put style_reason before numeric ratings in the JSON object."""
 
 
 def _confound_judge_prompt(axis: Axis, scenario: str, a: str, b: str) -> str:
@@ -945,7 +618,7 @@ def _confound_judge_prompt(axis: Axis, scenario: str, a: str, b: str) -> str:
     )
     dim_fields = "\n".join(f"- {dim}_likert: float" for dim in OFF_AXIS_DIMS)
     return f"""\
-You are auditing whether a contrastive training pair isolates one intended axis.
+You are judging whether a contrastive training pair isolates one intended axis.
 You do not know which response is positive or negative.
 
 Scenario:
@@ -964,9 +637,12 @@ Response B:
 Question: if a model trained on many pairs like this, could it learn a nuisance
 axis instead of the intended axis?
 
-Rate each possible off-axis confound from 1.0 to 7.0 in 0.5 increments:
+Rate each possible off-axis confound from 1.0 to 7.0 as floats:
 1.0 = absent/no meaningful confound; 4.0 = mixed/noticeable confound;
 7.0 = severe confound likely to dominate training.
+
+Prefer non-round decimals such as 1.3, 2.7, 4.1, or 5.6 when the evidence is
+between anchors. Use whole numbers only when the answer is exactly at an anchor.
 
 If the responses are substantively identical, rate off_axis_problem_likert 1.0.
 No contrast is not an off-axis confound; intended-axis movement is scored
@@ -976,11 +652,13 @@ Confounds:
 {dims}
 
 Return JSON matching the provided schema:
+- confound_reason: string, one short sentence
 {dim_fields}
 - off_axis_problem_likert: float
 - likely_spurious_axis: string, "none" or a short phrase
 - usable_for_training: bool
-- confound_reason: string, one short sentence
+
+Put confound_reason before numeric ratings in the JSON object.
 
 The overall off_axis_problem_likert should summarize the worst meaningful
 confound, not the average."""
@@ -1046,7 +724,8 @@ class OpenRouter:
             async with self.sem:
                 resp = await self.client.chat.completions.create(
                     **payload, extra_body=extra_body)
-            content = resp.choices[0].message.content or ""
+            message = resp.choices[0].message
+            content = message.content or ""
             last_content = content
             if json_schema is not None:
                 try:
@@ -1063,6 +742,8 @@ class OpenRouter:
                 "payload": payload,
                 "extra_body": extra_body,
                 "content": content,
+                "message": message.model_dump(mode="json"),
+                "reasoning": _message_reasoning(message),
             }, indent=2))
             return content
         raise ValueError(
@@ -1135,6 +816,8 @@ async def _evaluate_one(
     scenario = _scenario_text(row)
     pos_persona = _persona_text(axis, template, axis.pos_descriptor, "pos")
     neg_persona = _persona_text(axis, template, axis.neg_descriptor, "neg")
+    pos_generation_prompt = _generation_prompt(pos_persona, scenario)
+    neg_generation_prompt = _generation_prompt(neg_persona, scenario)
     base = {
         "eval_id": _eval_id(
             seed=seed,
@@ -1156,12 +839,14 @@ async def _evaluate_one(
         "axis": asdict(axis),
         "template": template,
         "prompt": scenario,
+        "pos_generation_prompt": pos_generation_prompt,
+        "neg_generation_prompt": neg_generation_prompt,
     }
     try:
         if pos_persona == neg_persona:
             pos_text = await router.chat_jsonish(
                 model=generator_model,
-                messages=[{"role": "user", "content": _generation_prompt(pos_persona, scenario)}],
+                messages=[{"role": "user", "content": pos_generation_prompt}],
                 temperature=gen_temperature,
                 max_tokens=260,
                 cache_tag="gen_pos",
@@ -1173,7 +858,7 @@ async def _evaluate_one(
             pos_text, neg_text = await asyncio.gather(
                 router.chat_jsonish(
                     model=generator_model,
-                    messages=[{"role": "user", "content": _generation_prompt(pos_persona, scenario)}],
+                    messages=[{"role": "user", "content": pos_generation_prompt}],
                     temperature=gen_temperature,
                     max_tokens=260,
                     cache_tag="gen_pos",
@@ -1182,7 +867,7 @@ async def _evaluate_one(
                 ),
                 router.chat_jsonish(
                     model=generator_model,
-                    messages=[{"role": "user", "content": _generation_prompt(neg_persona, scenario)}],
+                    messages=[{"role": "user", "content": neg_generation_prompt}],
                     temperature=gen_temperature,
                     max_tokens=260,
                     cache_tag="gen_neg",
@@ -1201,6 +886,12 @@ async def _evaluate_one(
         if pos_text == neg_text:
             pos_refusal_phrase_hits = _refusal_phrase_hits(pos_text)
             neg_refusal_phrase_hits = _refusal_phrase_hits(neg_text)
+            pos_persona_echo_hits = _persona_echo_hits(
+                pos_text, axis.pos_descriptor, pos_persona)
+            neg_persona_echo_hits = _persona_echo_hits(
+                neg_text, axis.neg_descriptor, neg_persona)
+            pos_persona_overlap_tokens = _persona_overlap_tokens(pos_text, pos_persona)
+            neg_persona_overlap_tokens = _persona_overlap_tokens(neg_text, neg_persona)
             axis_judges = [
                 {
                     "judge_model": axis_judge_model,
@@ -1270,6 +961,11 @@ async def _evaluate_one(
                 "word_pos": len(_words(pos_text)),
                 "word_neg": len(_words(neg_text)),
                 "word_delta_frac": 0.0,
+                "response_token_jaccard": 1.0,
+                "pos_repeated_token_frac": round(_repeated_token_frac(pos_text), 4),
+                "neg_repeated_token_frac": round(_repeated_token_frac(neg_text), 4),
+                "pos_persona_overlap_tokens": pos_persona_overlap_tokens,
+                "neg_persona_overlap_tokens": neg_persona_overlap_tokens,
                 "length_gate_enabled": max_word_delta_frac > 0,
                 "length_ok": True,
                 "style_deltas_pos_minus_neg": {dim: 0.0 for dim in STYLE_DIMS},
@@ -1279,7 +975,11 @@ async def _evaluate_one(
                 "off_axis_problem_frac": 0.0,
                 "pos_refusal_phrase_hits": pos_refusal_phrase_hits,
                 "neg_refusal_phrase_hits": neg_refusal_phrase_hits,
-                "persona_echo": False,
+                "pos_persona_echo_hits": pos_persona_echo_hits,
+                "neg_persona_echo_hits": neg_persona_echo_hits,
+                "judge_persona_echo": False,
+                "persona_echo": bool(pos_persona_echo_hits or neg_persona_echo_hits),
+                "judge_refusal_or_ai_break": False,
                 "refusal_or_ai_break": bool(pos_refusal_phrase_hits or neg_refusal_phrase_hits),
                 "strict_pass": False,
                 "identity_pair": True,
@@ -1412,6 +1112,9 @@ async def _evaluate_one(
         word_pos = len(_words(pos_text))
         word_neg = len(_words(neg_text))
         word_delta_frac = (word_pos - word_neg) / max(1, (word_pos + word_neg) / 2)
+        response_token_jaccard = _token_jaccard(pos_text, neg_text)
+        pos_repeated_token_frac = _repeated_token_frac(pos_text)
+        neg_repeated_token_frac = _repeated_token_frac(neg_text)
         style_deltas = {dim: _style_delta(style_j, dim, pos_label) for dim in STYLE_DIMS}
         max_style_abs_delta = max(abs(v) for v in style_deltas.values())
         off_axis_likerts = {
@@ -1421,10 +1124,27 @@ async def _evaluate_one(
         max_off_axis_category_likert = max(off_axis_likerts.values())
         pos_refusal_phrase_hits = _refusal_phrase_hits(pos_text)
         neg_refusal_phrase_hits = _refusal_phrase_hits(neg_text)
-        pos_echo = bool(style_j[f"persona_echo_{pos_label}"])
-        neg_echo = bool(style_j[f"persona_echo_{neg_label}"])
-        pos_refusal = bool(pos_refusal_phrase_hits)
-        neg_refusal = bool(neg_refusal_phrase_hits)
+        pos_persona_echo_hits = _persona_echo_hits(
+            pos_text, axis.pos_descriptor, pos_persona)
+        neg_persona_echo_hits = _persona_echo_hits(
+            neg_text, axis.neg_descriptor, neg_persona)
+        pos_persona_overlap_tokens = _persona_overlap_tokens(pos_text, pos_persona)
+        neg_persona_overlap_tokens = _persona_overlap_tokens(neg_text, neg_persona)
+        judge_persona_echo = bool(
+            style_j[f"persona_echo_{pos_label}"] or style_j[f"persona_echo_{neg_label}"])
+        pos_echo = bool(style_j[f"persona_echo_{pos_label}"]) or bool(pos_persona_echo_hits)
+        neg_echo = bool(style_j[f"persona_echo_{neg_label}"]) or bool(neg_persona_echo_hits)
+        judge_refusal_or_ai_break = bool(
+            style_j[f"refusal_or_ai_break_{pos_label}"]
+            or style_j[f"refusal_or_ai_break_{neg_label}"])
+        pos_refusal = (
+            bool(style_j[f"refusal_or_ai_break_{pos_label}"])
+            or bool(pos_refusal_phrase_hits)
+        )
+        neg_refusal = (
+            bool(style_j[f"refusal_or_ai_break_{neg_label}"])
+            or bool(neg_refusal_phrase_hits)
+        )
         length_ok = True if max_word_delta_frac <= 0 else abs(word_delta_frac) <= max_word_delta_frac
         strict_pass = (
             axis_delta >= 3
@@ -1458,6 +1178,11 @@ async def _evaluate_one(
             "word_pos": word_pos,
             "word_neg": word_neg,
             "word_delta_frac": round(word_delta_frac, 4),
+            "response_token_jaccard": round(response_token_jaccard, 4),
+            "pos_repeated_token_frac": round(pos_repeated_token_frac, 4),
+            "neg_repeated_token_frac": round(neg_repeated_token_frac, 4),
+            "pos_persona_overlap_tokens": pos_persona_overlap_tokens,
+            "neg_persona_overlap_tokens": neg_persona_overlap_tokens,
             "length_gate_enabled": max_word_delta_frac > 0,
             "length_ok": length_ok,
             "style_deltas_pos_minus_neg": style_deltas,
@@ -1468,7 +1193,11 @@ async def _evaluate_one(
                 _normalize_likert(float(confound_j["off_axis_problem_likert"]), 1.0, 7.0), 4),
             "pos_refusal_phrase_hits": pos_refusal_phrase_hits,
             "neg_refusal_phrase_hits": neg_refusal_phrase_hits,
+            "pos_persona_echo_hits": pos_persona_echo_hits,
+            "neg_persona_echo_hits": neg_persona_echo_hits,
+            "judge_persona_echo": judge_persona_echo,
             "persona_echo": pos_echo or neg_echo,
+            "judge_refusal_or_ai_break": judge_refusal_or_ai_break,
             "refusal_or_ai_break": pos_refusal or neg_refusal,
             "strict_pass": strict_pass,
         })
@@ -1572,14 +1301,24 @@ def print_judge_audit_samples(results: list[dict]) -> None:
         rec = results[idx]
         print(f"\n### {sample_name} idx={idx} eval_id={rec.get('eval_id')} error={rec.get('error')}")
         _print_text_block("prompt", str(rec.get("prompt", "")))
+        _print_text_block("pos_generation_prompt", str(rec.get("pos_generation_prompt", "")))
+        _print_text_block("neg_generation_prompt", str(rec.get("neg_generation_prompt", "")))
         _print_text_block("cho_pos_response", str(rec.get("pos_response", "")))
         _print_text_block("rej_neg_response", str(rec.get("neg_response", "")))
         _print_text_block(
-            "refusal_phrase_hits",
+            "deterministic_audit_hits",
             json.dumps({
-                "pos": rec.get("pos_refusal_phrase_hits", []),
-                "neg": rec.get("neg_refusal_phrase_hits", []),
+                "pos_refusal": rec.get("pos_refusal_phrase_hits", []),
+                "neg_refusal": rec.get("neg_refusal_phrase_hits", []),
+                "pos_persona_echo": rec.get("pos_persona_echo_hits", []),
+                "neg_persona_echo": rec.get("neg_persona_echo_hits", []),
+                "persona_echo": rec.get("persona_echo"),
                 "refusal_or_ai_break": rec.get("refusal_or_ai_break"),
+                "response_token_jaccard": rec.get("response_token_jaccard"),
+                "pos_repeated_token_frac": rec.get("pos_repeated_token_frac"),
+                "neg_repeated_token_frac": rec.get("neg_repeated_token_frac"),
+                "pos_persona_overlap_tokens": rec.get("pos_persona_overlap_tokens", []),
+                "neg_persona_overlap_tokens": rec.get("neg_persona_overlap_tokens", []),
             }, indent=2),
         )
         _print_text_block(
@@ -1590,7 +1329,7 @@ def print_judge_audit_samples(results: list[dict]) -> None:
 
 async def amain(args) -> None:
     load_dotenv(ROOT / ".env")
-    axes = _select_axes(args.axes, args.include_canary)
+    axes = _select_axes(args.axes)
     templates = _select_templates(args.templates)
     rows = _select_rows(args.family, args.n, args.seed)
     axis_judge_models = tuple(
@@ -1762,12 +1501,10 @@ def main() -> None:
     ap.add_argument("--family", default="character",
                     help="comma-separated scenario families; default avoids sycophancy")
     ap.add_argument("--n", type=int, default=6, help="number of scenario prompts")
-    ap.add_argument("--axes", default="default",
-                    help="'default', 'template', 'literature', 'skill', 'all', a persona-pair JSONL path, or comma-separated ids")
-    ap.add_argument("--include-canary", action="store_true",
-                    help="also test honest_flattering as an easy sycophancy canary")
-    ap.add_argument("--templates", default="default",
-                    help="'default', 'paper', 'skill', 'controls', path, or templates separated by ||")
+    ap.add_argument("--axes", default=str(ROOT / "data/persona_pairs_pilot_two.jsonl"),
+                    help="persona-pair JSONL path")
+    ap.add_argument("--templates", default=str(ROOT / "data/template_catalog.yaml"),
+                    help="'skill', 'controls', catalog path, text file path, or templates separated by ||")
     ap.add_argument("--seed", type=int, default=13)
     ap.add_argument("--max-word-delta-frac", type=float, default=0.0,
                     help="optional hard length gate; 0 means report-only")
