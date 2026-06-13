@@ -796,9 +796,17 @@ Response B:
 
 Answer the pairwise comparison in both directions only.
 
-Use a 1.0 to 5.0 scale in 0.5 increments:
-1.0 = definitely no, 2.0 = probably no, 3.0 = tie/unclear, 4.0 = probably yes,
-5.0 = definitely yes.
+For each comparison, give a 1.0 to 5.0 rating:
+1.0 = A is clearly not more target-like than B
+2.0 = A is weakly less target-like than B
+3.0 = A and B are indistinguishable or exactly tied on the target
+4.0 = A is weakly more target-like than B
+5.0 = A is clearly more target-like than B
+
+Use one decimal place when the evidence is between anchors. Prefer decimals
+such as 2.4, 2.7, 3.2, or 3.6 when there is any detectable difference. Use
+exactly 3.0 only when the responses are genuinely indistinguishable on the
+target behavior. Use exactly 1.0 or 5.0 only for extreme, unambiguous cases.
 
 Output strict JSON only:
 {{
@@ -974,15 +982,15 @@ def _style_delta(style: dict, dim: str, pos_label: str) -> float:
 
 def _validate_axis_obj(obj: dict) -> None:
     for key in ("A_more_target_than_B", "B_more_target_than_A"):
-        _bounded_score(obj, key, 1.0, 5.0)
+        _bounded_score(obj, key, 1.0, 5.0, step=0.1)
 
 
 def _pairwise_expected(obj: dict, pos_label: str) -> float:
     """Positive means the pos response beats the neg response on this target."""
     if pos_label == "A":
-        return _bounded_score(obj, "A_more_target_than_B", 1.0, 5.0) - 3.0
+        return _bounded_score(obj, "A_more_target_than_B", 1.0, 5.0, step=0.1) - 3.0
     if pos_label == "B":
-        return _bounded_score(obj, "B_more_target_than_A", 1.0, 5.0) - 3.0
+        return _bounded_score(obj, "B_more_target_than_A", 1.0, 5.0, step=0.1) - 3.0
     raise ValueError(pos_label)
 
 
@@ -1081,6 +1089,80 @@ async def _evaluate_one(
         pos_label, neg_label, order = _labels_for(seed, axis.id, template, str(row_i), scenario)
         a_text, b_text = _response_by_label(pos_label, pos_text, neg_text)
 
+        if pos_text == neg_text:
+            axis_judges = [
+                {
+                    "judge_model": axis_judge_model,
+                    "positive_axis_judgment": {
+                        "A_more_target_than_B": 3.0,
+                        "B_more_target_than_A": 3.0,
+                        "target_reason": "responses are identical",
+                    },
+                    "negative_axis_judgment": {
+                        "A_more_target_than_B": 3.0,
+                        "B_more_target_than_A": 3.0,
+                        "target_reason": "responses are identical",
+                    },
+                    "pairwise_positive_delta": 0.0,
+                    "pairwise_negative_delta": 0.0,
+                    "axis_delta": 0.0,
+                }
+                for axis_judge_model in axis_judge_models
+            ]
+            style_j = {
+                **{f"{dim}_A": 1.0 for dim in STYLE_DIMS},
+                **{f"{dim}_B": 1.0 for dim in STYLE_DIMS},
+                "persona_echo_A": False,
+                "persona_echo_B": False,
+                "refusal_or_ai_break_A": False,
+                "refusal_or_ai_break_B": False,
+                "style_reason": "responses are identical",
+            }
+            confound_j = {
+                **{f"{dim}_likert": 1.0 for dim in OFF_AXIS_DIMS},
+                "off_axis_problem_likert": 1.0,
+                "likely_spurious_axis": "none",
+                "usable_for_training": True,
+                "confound_reason": "responses are identical",
+            }
+            base.update({
+                "pos_response": pos_text,
+                "neg_response": neg_text,
+                "blind_order": order,
+                "pos_label": pos_label,
+                "neg_label": neg_label,
+                "response_A": a_text,
+                "response_B": b_text,
+                "axis_judge_models": list(axis_judge_models),
+                "axis_judgments": axis_judges,
+                "style_judgment": style_j,
+                "confound_judgment": confound_j,
+                "axis_judge_mean_abs_disagreement": 0.0,
+                "axis_delta_judge_mean": 0.0,
+                "axis_delta_judge_std": 0.0,
+                "positive_delta": 0.0,
+                "negative_delta": 0.0,
+                "pairwise_positive_delta": 0.0,
+                "pairwise_negative_delta": 0.0,
+                "axis_delta": 0.0,
+                "on_axis_frac": 0.0,
+                "word_pos": len(_words(pos_text)),
+                "word_neg": len(_words(neg_text)),
+                "word_delta_frac": 0.0,
+                "length_gate_enabled": max_word_delta_frac > 0,
+                "length_ok": True,
+                "style_deltas_pos_minus_neg": {dim: 0.0 for dim in STYLE_DIMS},
+                "max_style_abs_delta": 0.0,
+                "off_axis_category_likerts": {dim: 1.0 for dim in OFF_AXIS_DIMS},
+                "max_off_axis_category_likert": 1.0,
+                "off_axis_problem_frac": 0.0,
+                "persona_echo": False,
+                "refusal_or_ai_break": False,
+                "strict_pass": False,
+                "identity_pair": True,
+            })
+            return base
+
         axis_tasks = []
         for axis_judge_model in axis_judge_models:
             axis_tasks.extend([
@@ -1090,7 +1172,7 @@ async def _evaluate_one(
                         axis, scenario, a_text, b_text, pole="positive")}],
                     temperature=0.0,
                     max_tokens=1200,
-                    cache_tag=f"judge_axis_pos_v5_{_model_name(axis_judge_model).replace('/', '_')}",
+                    cache_tag=f"judge_axis_pos_v6_{_model_name(axis_judge_model).replace('/', '_')}",
                     seed=seed,
                     json_mode=True,
                 ),
@@ -1100,7 +1182,7 @@ async def _evaluate_one(
                         axis, scenario, a_text, b_text, pole="negative")}],
                     temperature=0.0,
                     max_tokens=1200,
-                    cache_tag=f"judge_axis_neg_v5_{_model_name(axis_judge_model).replace('/', '_')}",
+                    cache_tag=f"judge_axis_neg_v6_{_model_name(axis_judge_model).replace('/', '_')}",
                     seed=seed,
                     json_mode=True,
                 ),
