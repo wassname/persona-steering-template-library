@@ -25,8 +25,8 @@ This field is pre-scientific in a way: it is still an art. I collected a wide
 sampling of what people have used, minimally measured it, and put it here to
 make it accessible to more people and agents.
 
-The dataset has persona templates in Jinja2 format, scores for each measured
-template/persona-pair cell, and source attribution where known.
+<!-- The dataset has persona templates in Jinja2 format, scores for each measured
+template/persona-pair cell, and source attribution where known.  TODO this shoudl become redundnat -->
 
 ## Use
 
@@ -35,7 +35,7 @@ first: one row per measured template/persona-pair cell.
 
 Important columns:
 
-- `template_jinja`
+- `template_jinja`: TODO Example for each, description of each
 - `score`
 - `positive_persona`
 - `negative_persona`
@@ -57,6 +57,17 @@ kept as audit columns rather than folded into the headline score.
 
 ## Confounds Audited
 
+> My intuition is that many of these are RLHF-ish side effects: helpfulness,
+harmless refusals, honesty tone, sycophancy, polished vagueness, and generic
+assistant style can be large, easy-to-trigger axes that show up instead of the
+thing you meant. - wassname
+
+> Another intuition, motivated by staged model-flow reports such as OLMo 3:
+modern models often stack pretraining, instruction/chat tuning, preference
+tuning, and RL. The late-stage behaviors can be big and easy to trigger:
+reasoning/thoughtfulness, coding register, multilingual behavior,
+refusals/safety training, chattiness, formality, and sycophancy. - wassname
+
 The judge audits length, generic helpfulness, harmlessness/refusal,
 honesty/truthfulness, thoughtfulness/reasoning depth, task-context shift
 (code/chat/math/think), coding style, multilingual behavior, confidence,
@@ -70,25 +81,13 @@ style, multilinguality, verbosity, chattiness, confidence, hedging, vagueness,
 warmth, enthusiasm, praise, sycophancy, directness, formality, language shift,
 and incoherence.
 
-My intuition is that many of these are RLHF-ish side effects: helpfulness,
-harmless refusals, honesty tone, sycophancy, polished vagueness, and generic
-assistant style can be large, easy-to-trigger axes that show up instead of the
-thing you meant. - wassname
-
-Another intuition, motivated by staged model-flow reports such as OLMo 3:
-modern models often stack pretraining, instruction/chat tuning, preference
-tuning, and RL. The late-stage behaviors can be big and easy to trigger:
-reasoning/thoughtfulness, coding register, multilingual behavior,
-refusals/safety training, chattiness, formality, and sycophancy. - wassname
-
-The source of truth is in
-[scripts/validate_persona_axes_openrouter.py](scripts/validate_persona_axes_openrouter.py#L474).
+Code [scripts/validate_persona_axes_openrouter.py](scripts/validate_persona_axes_openrouter.py#L474).
 
 ## Provenance
 
 Sources are marked in the dataset as `source`, `source_type`, and `source_url`.
 Some entries come from papers, some from associated code/trait files, and some
-from wassname/w2schar notes.
+from wassname project notes.
 
 ## Acknowledgements
 
@@ -128,12 +127,5 @@ uv run python scripts/build_hf_dataset.py \
   author = {Wassname},
   year = {2026},
   url = {https://github.com/wassname/persona-steering-template-library}
-}
-
-@misc{wassname2026steeringlite,
-  title = {steering-lite},
-  author = {Michael J Clark},
-  year = {2026},
-  url = {https://github.com/wassname/steering-lite}
 }
 ```
