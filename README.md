@@ -1,159 +1,75 @@
 # Persona Steering Template Library
 
-Measured candidate prompt templates and contrastive persona pairs for persona, activation, and weight steering experiments.
+Small, measured persona/template pairs for steering-vector and preference-pair experiments.
 
-Hugging Face dataset: https://huggingface.co/datasets/wassname/persona-steering-template-library
+- Hugging Face dataset: https://huggingface.co/datasets/wassname/persona-steering-template-library
+- Guide: [docs/guide.md](docs/guide.md)
 
-This repository is the code and provenance side of the library. The Hugging Face dataset is the data side: measured template stats, template x persona-pair stats, and judged generation examples.
+## Example
 
-## What This Is
+```text
+template:
+  You are a {persona} person thinking through the situation.
 
-The portable unit is not a weak-to-strong harness. It is a measured library of:
+negative persona:
+  authority-deferential even when wellbeing suffers
 
-- prompt templates with a `{persona}` slot
-- short contrastive persona pairs, labeled as `neg->pos`
-- scenario prompts used to elicit behavior
-- on-axis Likert judge ratings
-- off-axis/confound Likert judge ratings
-- style, length, persona-echo, and refusal flags
-- literature and practice provenance for why each family of template exists
+positive persona:
+  wellbeing-focused even when authority-defying
 
-The current v1 data is preliminary. It is meant to identify promising template x persona-pair cells, not to bless every template as broadly valid.
+measured pilot:
+  strict_pass_rate = 0.75
+  mean_axis_delta = 6.25
+  mean_off_axis_problem = 2.00
+  mean_max_style_abs_delta = 1.50
+```
 
-## Current V1 Snapshot
+The point is not "this sounds like a good prompt". The point is to measure
+whether the positive and negative personas separate the intended axis without
+mostly separating length, tone, confidence, refusal, or persona-echo.
 
-The included v1 export contains:
+## What To Browse
 
-- `data/template_stats.jsonl`: 10 template-level rows
-- `data/template_pair_stats.jsonl`: 59 template x persona-pair rows
-- `data/examples.jsonl`: 156 judged generation examples
+On Hugging Face, start with `persona_pairs_v2_review`.
 
-No whole template is yet broadly validated. Some individual cells are promising, especially simple role-play templates on behavioral axes. Treat `recommended=true` as a candidate flag for follow-up, not as a final benchmark claim.
+That table gives one row per persona pair:
 
-## V2 Candidate Library
+- `axis`: `neg->pos`
+- `positive_behavior` / `negative_behavior`: what the pair should separate
+- `proof_grade`: `pilot_recommended`, `pilot_measured_not_promoted`, or `candidate_unmeasured`
+- `best_template`: best measured template for that pair, if any
+- `best_axis_delta`, `best_off_axis_problem`, `best_max_style_abs_delta`: compact proof stats
 
-V2 candidate material lives separately from measured stats:
+Then inspect `v2_pilot_seed23_examples` to read the actual positive/negative
+completions and judge ratings.
 
-- `data/persona_pairs_v2_candidates.jsonl`: 16 candidate persona pairs
-- `data/templates_v2_candidates.txt`: 12 reusable `{persona}` templates
-- `data/scenarios_v2_candidates.jsonl`: 12 scenario prompts for smoke and first sweeps
-- `docs/v2_expansion.md`: promotion criteria and first-sweep command
+## Files
 
-These are not promoted templates yet. They are the expanded candidate grid to measure next.
+- `data/persona_pairs_v2_candidates.jsonl`: candidate persona pairs
+- `data/templates_v2_candidates.txt`: candidate `{persona}` templates
+- `data/scenarios_v2_candidates.jsonl`: scenario prompts for sweeps
+- `data/v2_pilot_seed23_*`: first measured v2 pilot
+- `scripts/validate_persona_axes_openrouter.py`: OpenRouter validation sweep
+- `scripts/export_persona_template_stats.py`: aggregate raw sweep output
+- `scripts/build_hf_dataset.py`: build parquet-only HF upload folder
 
-## V2 Pilot
+## Current Status
 
-`data/v2_pilot_seed23_*` contains a small measured pilot over 4 behavioral persona pairs, 4 templates, and 4 scenarios.
+Preliminary. The current pilot is small: 4 persona pairs x 4 templates x 4
+scenarios. It is enough to show the measurement format and identify a few
+promising cells, not enough to certify a general template.
 
-- planned pairs: 64
-- successful judged pairs: 59
-- judge JSON failures: 5
-- strongest pilot cell: `wellbeing_authority` with `You are a {persona} person thinking through the situation.`
-- next-best pilot cell: `wellbeing_authority` with `You are a {persona} person acting in the world.`
-
-This is still not the full v2 release; it is the first measured slice of the expanded library.
-
-## Data Files
-
-`data/template_stats.jsonl`
-
-One row per template, aggregated across persona pairs and scenarios.
-
-`data/template_pair_stats.jsonl`
-
-One row per template x persona pair. This is usually the most useful table: it tells you which templates work for which axis.
-
-`data/examples.jsonl`
-
-One row per generated pair, including prompt, positive-persona response, negative-persona response, judge deltas, style deltas, and confound flags.
-
-## Important Columns
-
-- `template`: prompt template containing `{persona}`
-- `persona_pair`: axis label, usually `neg->pos`
-- `strict_pass_rate`: fraction of examples passing the current v1 gates
-- `mean_axis_delta`: intended-axis Likert separation
-- `mean_off_axis_problem`: judge-rated chance that the apparent difference is actually off-axis
-- `mean_max_style_abs_delta`: largest absolute style movement across audited style dimensions
-- `mean_abs_word_delta_frac`: report-only length difference
-- `persona_echo_rate`: whether outputs explicitly echoed the persona prompt
-- `refusal_or_ai_break_rate`: refusal or role-break rate
-- `recommended`: conservative v1 candidate flag
-
-## Run A New Sweep
-
-Install:
+## Run
 
 ```sh
 uv sync
-```
-
-Run a dry plan without network:
-
-```sh
 uv run python scripts/validate_persona_axes_openrouter.py \
   --dry-run \
-  --axes template \
-  --templates paper \
-  --n 1 \
+  --axes data/persona_pairs_v2_candidates.jsonl \
+  --templates data/templates_v2_candidates.txt \
+  --family data/scenarios_v2_candidates.jsonl \
+  --n 2 \
   --out out/dryrun.json
 ```
 
-Run a small OpenRouter sweep:
-
-```sh
-OPENROUTER_API_KEY=... uv run python scripts/validate_persona_axes_openrouter.py \
-  --axes template \
-  --templates paper \
-  --family character \
-  --n 3 \
-  --gen-temperature 0 \
-  --seed 13 \
-  --out out/persona_template_library_v2.json
-```
-
-Export upload-friendly tables:
-
-```sh
-uv run python scripts/export_persona_template_stats.py \
-  out/persona_template_library_v2.json \
-  --out-prefix out/persona_template_library_v2
-```
-
-You can pass your own scenario JSONL as `--family path/to/scenarios.jsonl`. Each line needs `prompt` or `question` or `text`.
-
-You can also pass a persona-pair JSONL as `--axes path/to/persona_pairs.jsonl`. Each line needs `pos`, `neg`, `positive_behavior`, and `negative_behavior`.
-
-## Validation Method
-
-For each template x persona pair x scenario:
-
-1. Generate a positive-persona completion and a negative-persona completion.
-2. Use deterministic generation by default: `temperature=0`, fixed `seed`.
-3. Judge the pair in randomized A/B order.
-4. Ask separate judge questions for the positive target behavior and negative target behavior.
-5. Ask a separate confound/style audit.
-6. Report length and style deltas rather than using length as a hard gate.
-
-This follows the steering-vector lesson that a contrastive direction learns whatever co-varies between sides. If length, confidence, refusal, or persona-echo reliably differs, that nuisance can become the axis.
-
-## Literature And Provenance
-
-The docs folder vendors the local persona-steering notes used to build v1:
-
-- `docs/persona-steering-skill.md`
-- `docs/how_to_write_personas.md`
-- `docs/literature/literature.md`
-- `docs/literature/evidence.md`
-- `docs/literature/examples.md`
-- `docs/literature/curation.md`
-
-Key influences include repeng, Persona Vectors, Assistant Axis, CAA, and steering-reliability work. Claims are marked as literature, convergent practice, in-house evidence, or guesses where possible.
-
-## Relationship To W2S
-
-This repo deliberately excludes the weak-to-strong training harness. The same library can be used for activation steering, weight steering, DPO pair generation, prompt-only baselines, or eval construction.
-
-## License
-
-MIT.
+See [docs/guide.md](docs/guide.md) for measured runs, export, and upload.

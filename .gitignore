@@ -3,5 +3,8 @@
 __pycache__/
 .pytest_cache/
 out/
+docs/spec/
+hf/
+parquet/
+*.parquet
 *.pyc
-

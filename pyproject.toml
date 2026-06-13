@@ -6,8 +6,10 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
+  "huggingface-hub>=1.18.0",
   "loguru",
   "openai",
+  "pyarrow>=24.0.0",
   "python-dotenv",
   "tabulate",
   "tqdm",
