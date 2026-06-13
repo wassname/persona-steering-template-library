@@ -13,6 +13,7 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
+from adjustText import adjust_text
 import matplotlib.pyplot as plt
 import pyarrow.parquet as pq
 
@@ -104,11 +105,15 @@ def _place_label(i: int, point: dict[str, Any]) -> tuple[float, float, str, str]
     dy = [0.035, -0.05, 0.075, -0.09, 0.115, -0.13, 0.16, -0.175][i % 8]
     x = min(0.98, point["x"] + dx) if point["x"] < 0.9 else max(0.05, point["x"] - 0.02)
     y = min(0.98, max(0.02, point["y"] + dy))
+    if point["y"] < 0.08:
+        y = max(0.08, y)
     ha = "left" if point["x"] < 0.9 else "right"
     return x, y, ha, "center"
 
 
 def _short_template(text: str, width: int = 52) -> str:
+    if text == "__verbatim_skill_persona__":
+        text = "engineered long persona prefix"
     text = text.replace("{{ persona }}", "{persona}").replace("\n", " ")
     text = " ".join(text.split())
     if len(text) <= width:
@@ -120,6 +125,15 @@ def _short_template(text: str, width: int = 52) -> str:
 def _short_label(point: dict[str, Any]) -> str:
     text = f'{point["cell_id"]}: "{_short_template(point["template"])}"'
     return textwrap.fill(text, width=38)
+
+
+def _y_limits(points: list[dict[str, Any]], labels: list[dict[str, Any]]) -> tuple[float, float]:
+    ys = [p["y"] for p in points]
+    label_ys = [p["y"] for p in labels]
+    ymax = min(1.02, max(max(ys), max(label_ys, default=0.0)) + 0.18)
+    ymax = max(0.28, ymax)
+    ymin = min(-0.02, min(min(ys), min(label_ys, default=0.0)) - 0.06)
+    return ymin, ymax
 
 
 def main() -> None:
@@ -145,7 +159,7 @@ def main() -> None:
         linewidths=0,
     )
     for point in points:
-        if point["count"] > 1:
+        if point["count"] >= 4:
             ax.text(
                 point["x"],
                 point["y"],
@@ -155,23 +169,27 @@ def main() -> None:
                 fontsize=6.5,
                 color="white" if point["recommended"] else "0.1",
             )
+    texts = []
+    target_x = []
+    target_y = []
     for i, point in enumerate(labels):
         x, y, ha, va = _place_label(i, point)
         count_suffix = f" [{point['count']}]" if point["count"] > 1 else ""
-        ax.annotate(
+        texts.append(ax.text(
+            x,
+            y,
             _short_label(point) + count_suffix,
-            xy=(point["x"], point["y"]),
-            xytext=(x, y),
-            textcoords="data",
             ha=ha,
             va=va,
             fontsize=6.5,
             color="0.15",
-            arrowprops={"arrowstyle": "-", "color": "0.65", "lw": 0.55},
-        )
+            bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.82, "pad": 0.7},
+        ))
+        target_x.append(point["x"])
+        target_y.append(point["y"])
 
     ax.set_xlim(-0.02, 1.02)
-    ax.set_ylim(-0.02, 1.02)
+    ax.set_ylim(*_y_limits(points, labels))
     ax.set_xlabel("on-axis movement")
     ax.set_ylabel("off-axis confounding")
     ax.set_title("Persona template cells: move the intended axis, avoid confounds", fontsize=10)
@@ -179,6 +197,24 @@ def main() -> None:
     ax.spines["right"].set_visible(False)
     ax.grid(True, color="0.9", linewidth=0.6)
     ax.text(1.0, -0.13, "better is lower-right", transform=ax.transAxes, ha="right", fontsize=8)
+    if texts:
+        adjust_text(
+            texts,
+            x=[p["x"] for p in points],
+            y=[p["y"] for p in points],
+            target_x=target_x,
+            target_y=target_y,
+            ax=ax,
+            expand=(1.08, 1.22),
+            force_text=(0.16, 0.34),
+            force_static=(0.08, 0.16),
+            force_pull=(0.012, 0.018),
+            max_move=(18, 18),
+            ensure_inside_axes=True,
+            prevent_crossings=True,
+            iter_lim=600,
+            arrowprops={"arrowstyle": "-", "color": "0.65", "lw": 0.55},
+        )
     fig.tight_layout()
     args.out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(args.out)

@@ -12,6 +12,7 @@ NORMAL_STATS = ROOT / "data/v2_pilot_seed24_template_pair_stats.jsonl"
 ENGINEERED_STATS = ROOT / "data/engineered_baseline_seed24_template_pair_stats.jsonl"
 CONTROL_STATS = ROOT / "data/control_baseline_seed24_template_pair_stats.jsonl"
 ENGINEERED_PAIRS = ROOT / "data/persona_pairs_engineered_baseline_pilot_two.jsonl"
+ENGINEERED_DISPLAY = "engineered long persona prefix"
 
 START = "<!-- results-snapshot:start -->"
 END = "<!-- results-snapshot:end -->"
@@ -34,6 +35,8 @@ def _score(row: dict) -> float:
 
 
 def _markdown_text(text: str) -> str:
+    if text == "__verbatim_skill_persona__":
+        text = ENGINEERED_DISPLAY
     if text == "":
         return "`<blank>`"
     text = text.replace("{{ persona }}", "{persona}")
@@ -41,7 +44,8 @@ def _markdown_text(text: str) -> str:
     text = text.replace("&", "&amp;")
     text = text.replace("<", "&lt;")
     text = text.replace(">", "&gt;")
-    text = text.replace("|", "\\|")
+    text = text.replace("\\", "&#92;")
+    text = text.replace("|", "&#124;")
     return text.replace("\n", "<br>")
 
 
@@ -159,14 +163,14 @@ def _appendix_block() -> str:
         "Engineered prefixes:",
         _engineered_prefixes(),
         (
-            "The out-of-context stress strings mostly failed by not moving the "
-            "intended axis. In the audited low-scoring rows they did not produce "
-            "universal refusals; the paired answers usually made the same decision "
-            "in similar language."
+            "These simple roleplay and stress strings mostly failed by not moving "
+            "the intended axis. In the audited low-scoring rows they did not "
+            "produce universal refusals; the paired answers usually made the same "
+            "decision in similar language."
         ),
-        "Out-of-context stress templates, comparable mean over both measured axes:",
+        "Simple roleplay and stress templates, comparable mean over both measured axes:",
         _table(stress_mean_rows),
-        "Out-of-context stress templates, per axis:",
+        "Simple roleplay and stress templates, per axis:",
         _detail_table(stress_detail_rows),
         "Controls:",
         _table(control_rows),

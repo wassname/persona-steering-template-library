@@ -44,6 +44,7 @@ from template_catalog import active_template_rows, load_template_catalog
 
 ROOT = Path(__file__).resolve().parents[1]
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+JSON_RETRIES = 3
 
 
 @dataclass(frozen=True)
@@ -531,6 +532,31 @@ OFF_AXIS_DIM_DESCRIPTIONS = {
 
 OFF_AXIS_DIMS = tuple(OFF_AXIS_DIM_DESCRIPTIONS)
 
+REFUSAL_PHRASES = (
+    "as an ai language model",
+    "as a language model",
+    "as an ai",
+    "i'm sorry, but",
+    "i apologize, but",
+    "i cannot assist",
+    "i can't assist",
+    "i cannot fulfill",
+    "i can't fulfill",
+    "i cannot provide",
+    "i can't provide",
+    "i won't provide",
+    "i am unable to",
+    "i'm unable to",
+    "unable to offer assistance",
+    "cannot provide guidance",
+    "cannot provide information",
+    "cannot support or promote",
+    "against my programming",
+    "safety guidelines",
+    "prioritize user safety",
+    "adhere to safety",
+)
+
 
 def _model_name(name: str) -> str:
     return name.removeprefix("openrouter/")
@@ -545,10 +571,77 @@ def _json_obj(text: str) -> dict:
     text = text.strip()
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.M)
-    match = re.search(r"\{.*\}", text, flags=re.S)
-    if not match:
-        raise ValueError(f"no JSON object in model output: {text[:300]!r}")
-    return json.loads(match.group(0))
+    return json.loads(text)
+
+
+def _assert_json_text(text: str, json_schema: dict | None = None) -> None:
+    _json_obj(text)
+
+
+def _refusal_phrase_hits(text: str) -> list[str]:
+    lowered = text.lower()
+    return [phrase for phrase in REFUSAL_PHRASES if phrase in lowered]
+
+
+def _number_schema() -> dict:
+    return {"type": "number"}
+
+
+def _boolean_schema() -> dict:
+    return {"type": "boolean"}
+
+
+def _string_schema() -> dict:
+    return {"type": "string"}
+
+
+def _object_schema(name: str, properties: dict[str, dict]) -> dict:
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": name,
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "properties": properties,
+                "required": list(properties),
+                "additionalProperties": False,
+            },
+        },
+    }
+
+
+def _axis_judge_schema() -> dict:
+    return _object_schema("axis_pairwise_judgment", {
+        "target_reason": _string_schema(),
+        "A_more_target_than_B": _number_schema(),
+    })
+
+
+def _style_judge_schema() -> dict:
+    properties = {}
+    for dim in STYLE_DIMS:
+        properties[f"{dim}_A"] = _number_schema()
+        properties[f"{dim}_B"] = _number_schema()
+    properties.update({
+        "persona_echo_A": _boolean_schema(),
+        "persona_echo_B": _boolean_schema(),
+        "refusal_or_ai_break_A": _boolean_schema(),
+        "refusal_or_ai_break_B": _boolean_schema(),
+        "style_reason": _string_schema(),
+    })
+    return _object_schema("style_judgment", properties)
+
+
+def _confound_judge_schema() -> dict:
+    properties = {f"{dim}_likert": _number_schema() for dim in OFF_AXIS_DIMS}
+    properties.update({
+        "off_axis_problem_likert": _number_schema(),
+        "likely_spurious_axis": _string_schema(),
+        "usable_for_training": _boolean_schema(),
+        "confound_reason": _string_schema(),
+    })
+    return _object_schema("confound_judgment", properties)
 
 
 def _words(text: str) -> list[str]:
@@ -794,7 +887,8 @@ Response A:
 Response B:
 {b}
 
-Answer the pairwise comparison in both directions only.
+Answer one pairwise comparison only: is Response A more target-like than
+Response B?
 
 For each comparison, give a 1.0 to 5.0 rating:
 1.0 = A is clearly not more target-like than B
@@ -808,19 +902,14 @@ such as 2.4, 2.7, 3.2, or 3.6 when there is any detectable difference. Use
 exactly 3.0 only when the responses are genuinely indistinguishable on the
 target behavior. Use exactly 1.0 or 5.0 only for extreme, unambiguous cases.
 
-Output strict JSON only:
-{{
-  "A_more_target_than_B": 3.0,
-  "B_more_target_than_A": 3.0,
-  "target_reason": "one short sentence"
-}}"""
+Return JSON matching the provided schema:
+- target_reason: string, one short sentence
+- A_more_target_than_B: float"""
 
 
 def _style_judge_prompt(scenario: str, a: str, b: str) -> str:
     dims = "\n".join(f"- {dim}: {desc}" for dim, desc in STYLE_DIM_DESCRIPTIONS.items())
-    dim_json = "\n".join(
-        f'  "{dim}_A": 1.0, "{dim}_B": 1.0,' for dim in STYLE_DIMS
-    )
+    dim_fields = "\n".join(f"- {dim}_A: float; {dim}_B: float" for dim in STYLE_DIMS)
     return f"""\
 You are a fresh-eyes style auditor. Ignore whether either response gives better
 advice. Rate only surface style/tone. You do not know the intended axis or which
@@ -843,20 +932,18 @@ Dimensions:
 
 Also flag explicit persona echo, refusal, or AI-role breaks.
 
-Output strict JSON only:
-{{
-{dim_json}
-  "persona_echo_A": false, "persona_echo_B": false,
-  "refusal_or_ai_break_A": false, "refusal_or_ai_break_B": false,
-  "style_reason": "one short sentence"
-}}"""
+Return JSON matching the provided schema:
+{dim_fields}
+- persona_echo_A: bool; persona_echo_B: bool
+- refusal_or_ai_break_A: bool; refusal_or_ai_break_B: bool
+- style_reason: string, one short sentence"""
 
 
 def _confound_judge_prompt(axis: Axis, scenario: str, a: str, b: str) -> str:
     dims = "\n".join(
         f"- {dim}: {desc}" for dim, desc in OFF_AXIS_DIM_DESCRIPTIONS.items()
     )
-    dim_json = "\n".join(f'  "{dim}_likert": 1.0,' for dim in OFF_AXIS_DIMS)
+    dim_fields = "\n".join(f"- {dim}_likert: float" for dim in OFF_AXIS_DIMS)
     return f"""\
 You are auditing whether a contrastive training pair isolates one intended axis.
 You do not know which response is positive or negative.
@@ -888,14 +975,12 @@ separately.
 Confounds:
 {dims}
 
-Output strict JSON only:
-{{
-{dim_json}
-  "off_axis_problem_likert": 1.0,
-  "likely_spurious_axis": "none or short phrase",
-  "usable_for_training": true,
-  "confound_reason": "one short sentence"
-}}
+Return JSON matching the provided schema:
+{dim_fields}
+- off_axis_problem_likert: float
+- likely_spurious_axis: string, "none" or a short phrase
+- usable_for_training: bool
+- confound_reason: string, one short sentence
 
 The overall off_axis_problem_likert should summarize the worst meaningful
 confound, not the average."""
@@ -924,7 +1009,7 @@ class OpenRouter:
         max_tokens: int,
         cache_tag: str,
         seed: int,
-        json_mode: bool,
+        json_schema: dict | None,
     ) -> str:
         payload = {
             "model": _model_name(model),
@@ -939,23 +1024,51 @@ class OpenRouter:
             "reasoning_effort": "none",
             "include_reasoning": False,
         }
-        if json_mode:
-            payload["response_format"] = {"type": "json_object"}
+        if json_schema is not None:
+            payload["response_format"] = json_schema
         key = f"{cache_tag}_{_hkey({'payload': payload, 'extra_body': extra_body})}.json"
         path = self.cache_dir / key
         if path.exists():
-            return json.loads(path.read_text())["content"]
-        async with self.sem:
-            resp = await self.client.chat.completions.create(
-                **payload, extra_body=extra_body)
-        content = resp.choices[0].message.content or ""
-        path.write_text(json.dumps({
-            "created_at": time.time(),
-            "payload": payload,
-            "extra_body": extra_body,
-            "content": content,
-        }, indent=2))
-        return content
+            content = json.loads(path.read_text())["content"]
+            if json_schema is None:
+                return content
+            try:
+                _assert_json_text(content, json_schema)
+                return content
+            except (json.JSONDecodeError, ValueError):
+                bad_path = path.with_suffix(f".bad-{int(time.time())}.json")
+                path.rename(bad_path)
+                logger.warning(f"quarantined malformed cached JSON judge output: {bad_path}")
+        attempts = JSON_RETRIES if json_schema is not None else 1
+        last_content = ""
+        last_error: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            async with self.sem:
+                resp = await self.client.chat.completions.create(
+                    **payload, extra_body=extra_body)
+            content = resp.choices[0].message.content or ""
+            last_content = content
+            if json_schema is not None:
+                try:
+                    _assert_json_text(content, json_schema)
+                except (json.JSONDecodeError, ValueError) as e:
+                    last_error = e
+                    logger.warning(
+                        f"malformed JSON judge output attempt {attempt}/{attempts} "
+                        f"cache_tag={cache_tag}: {content[:160]!r}"
+                    )
+                    continue
+            path.write_text(json.dumps({
+                "created_at": time.time(),
+                "payload": payload,
+                "extra_body": extra_body,
+                "content": content,
+            }, indent=2))
+            return content
+        raise ValueError(
+            f"malformed JSON after {attempts} attempts for {cache_tag}: "
+            f"{last_error}; content={last_content[:500]!r}"
+        )
 
 
 def _labels_for(seed: int, *parts: str) -> tuple[str, str, str]:
@@ -981,17 +1094,13 @@ def _style_delta(style: dict, dim: str, pos_label: str) -> float:
 
 
 def _validate_axis_obj(obj: dict) -> None:
-    for key in ("A_more_target_than_B", "B_more_target_than_A"):
-        _bounded_score(obj, key, 1.0, 5.0, step=0.1)
+    _bounded_score(obj, "A_more_target_than_B", 1.0, 5.0, step=0.1)
 
 
-def _pairwise_expected(obj: dict, pos_label: str) -> float:
+def _pairwise_expected(obj: dict, first_is_positive: bool) -> float:
     """Positive means the pos response beats the neg response on this target."""
-    if pos_label == "A":
-        return _bounded_score(obj, "A_more_target_than_B", 1.0, 5.0, step=0.1) - 3.0
-    if pos_label == "B":
-        return _bounded_score(obj, "B_more_target_than_A", 1.0, 5.0, step=0.1) - 3.0
-    raise ValueError(pos_label)
+    signed = _bounded_score(obj, "A_more_target_than_B", 1.0, 5.0, step=0.1) - 3.0
+    return signed if first_is_positive else -signed
 
 
 def _validate_style_obj(obj: dict) -> None:
@@ -1057,7 +1166,7 @@ async def _evaluate_one(
                 max_tokens=260,
                 cache_tag="gen_pos",
                 seed=seed,
-                json_mode=False,
+                json_schema=None,
             )
             neg_text = pos_text
         else:
@@ -1069,7 +1178,7 @@ async def _evaluate_one(
                     max_tokens=260,
                     cache_tag="gen_pos",
                     seed=seed,
-                    json_mode=False,
+                    json_schema=None,
                 ),
                 router.chat_jsonish(
                     model=generator_model,
@@ -1078,7 +1187,7 @@ async def _evaluate_one(
                     max_tokens=260,
                     cache_tag="gen_neg",
                     seed=seed,
-                    json_mode=False,
+                    json_schema=None,
                 ),
             )
         pos_text, neg_text = pos_text.strip(), neg_text.strip()
@@ -1090,19 +1199,31 @@ async def _evaluate_one(
         a_text, b_text = _response_by_label(pos_label, pos_text, neg_text)
 
         if pos_text == neg_text:
+            pos_refusal_phrase_hits = _refusal_phrase_hits(pos_text)
+            neg_refusal_phrase_hits = _refusal_phrase_hits(neg_text)
             axis_judges = [
                 {
                     "judge_model": axis_judge_model,
-                    "positive_axis_judgment": {
+                    "positive_axis_forward_judgment": {
                         "A_more_target_than_B": 3.0,
-                        "B_more_target_than_A": 3.0,
                         "target_reason": "responses are identical",
                     },
-                    "negative_axis_judgment": {
+                    "positive_axis_reverse_judgment": {
                         "A_more_target_than_B": 3.0,
-                        "B_more_target_than_A": 3.0,
                         "target_reason": "responses are identical",
                     },
+                    "negative_axis_forward_judgment": {
+                        "A_more_target_than_B": 3.0,
+                        "target_reason": "responses are identical",
+                    },
+                    "negative_axis_reverse_judgment": {
+                        "A_more_target_than_B": 3.0,
+                        "target_reason": "responses are identical",
+                    },
+                    "positive_forward_delta": 0.0,
+                    "positive_reverse_delta": 0.0,
+                    "negative_forward_delta": 0.0,
+                    "negative_reverse_delta": 0.0,
                     "pairwise_positive_delta": 0.0,
                     "pairwise_negative_delta": 0.0,
                     "axis_delta": 0.0,
@@ -1156,8 +1277,10 @@ async def _evaluate_one(
                 "off_axis_category_likerts": {dim: 1.0 for dim in OFF_AXIS_DIMS},
                 "max_off_axis_category_likert": 1.0,
                 "off_axis_problem_frac": 0.0,
+                "pos_refusal_phrase_hits": pos_refusal_phrase_hits,
+                "neg_refusal_phrase_hits": neg_refusal_phrase_hits,
                 "persona_echo": False,
-                "refusal_or_ai_break": False,
+                "refusal_or_ai_break": bool(pos_refusal_phrase_hits or neg_refusal_phrase_hits),
                 "strict_pass": False,
                 "identity_pair": True,
             })
@@ -1172,9 +1295,19 @@ async def _evaluate_one(
                         axis, scenario, a_text, b_text, pole="positive")}],
                     temperature=0.0,
                     max_tokens=1200,
-                    cache_tag=f"judge_axis_pos_v6_{_model_name(axis_judge_model).replace('/', '_')}",
+                    cache_tag=f"judge_axis_pos_fwd_v7_{_model_name(axis_judge_model).replace('/', '_')}",
                     seed=seed,
-                    json_mode=True,
+                    json_schema=_axis_judge_schema(),
+                ),
+                router.chat_jsonish(
+                    model=axis_judge_model,
+                    messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
+                        axis, scenario, b_text, a_text, pole="positive")}],
+                    temperature=0.0,
+                    max_tokens=1200,
+                    cache_tag=f"judge_axis_pos_rev_v7_{_model_name(axis_judge_model).replace('/', '_')}",
+                    seed=seed,
+                    json_schema=_axis_judge_schema(),
                 ),
                 router.chat_jsonish(
                     model=axis_judge_model,
@@ -1182,9 +1315,19 @@ async def _evaluate_one(
                         axis, scenario, a_text, b_text, pole="negative")}],
                     temperature=0.0,
                     max_tokens=1200,
-                    cache_tag=f"judge_axis_neg_v6_{_model_name(axis_judge_model).replace('/', '_')}",
+                    cache_tag=f"judge_axis_neg_fwd_v7_{_model_name(axis_judge_model).replace('/', '_')}",
                     seed=seed,
-                    json_mode=True,
+                    json_schema=_axis_judge_schema(),
+                ),
+                router.chat_jsonish(
+                    model=axis_judge_model,
+                    messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
+                        axis, scenario, b_text, a_text, pole="negative")}],
+                    temperature=0.0,
+                    max_tokens=1200,
+                    cache_tag=f"judge_axis_neg_rev_v7_{_model_name(axis_judge_model).replace('/', '_')}",
+                    seed=seed,
+                    json_schema=_axis_judge_schema(),
                 ),
             ])
         style_raw, confound_raw, *axis_raw = await asyncio.gather(
@@ -1195,7 +1338,7 @@ async def _evaluate_one(
                 max_tokens=4096,
                 cache_tag="judge_style_v5",
                 seed=seed,
-                json_mode=True,
+                json_schema=_style_judge_schema(),
             ),
             router.chat_jsonish(
                 model=style_judge_model,
@@ -1204,26 +1347,53 @@ async def _evaluate_one(
                 max_tokens=4096,
                 cache_tag="judge_confound_v6",
                 seed=seed,
-                json_mode=True,
+                json_schema=_confound_judge_schema(),
             ),
             *axis_tasks,
         )
+        raw_judge_outputs = {
+            "style": style_raw,
+            "confound": confound_raw,
+            "axis": [
+                {
+                    "judge_model": axis_judge_model,
+                    "positive_forward": axis_raw[4 * i],
+                    "positive_reverse": axis_raw[4 * i + 1],
+                    "negative_forward": axis_raw[4 * i + 2],
+                    "negative_reverse": axis_raw[4 * i + 3],
+                }
+                for i, axis_judge_model in enumerate(axis_judge_models)
+            ],
+        }
+        base["raw_judge_outputs"] = raw_judge_outputs
         style_j = _json_obj(style_raw)
         confound_j = _json_obj(confound_raw)
         _validate_style_obj(style_j)
         _validate_confound_obj(confound_j)
         axis_judges = []
         for i, axis_judge_model in enumerate(axis_judge_models):
-            pos_axis_j = _json_obj(axis_raw[2 * i])
-            neg_axis_j = _json_obj(axis_raw[2 * i + 1])
-            _validate_axis_obj(pos_axis_j)
-            _validate_axis_obj(neg_axis_j)
-            pairwise_positive_delta = _pairwise_expected(pos_axis_j, pos_label)
-            pairwise_negative_delta = -_pairwise_expected(neg_axis_j, pos_label)
+            pos_fwd_j = _json_obj(axis_raw[4 * i])
+            pos_rev_j = _json_obj(axis_raw[4 * i + 1])
+            neg_fwd_j = _json_obj(axis_raw[4 * i + 2])
+            neg_rev_j = _json_obj(axis_raw[4 * i + 3])
+            for axis_j in (pos_fwd_j, pos_rev_j, neg_fwd_j, neg_rev_j):
+                _validate_axis_obj(axis_j)
+            positive_forward_delta = _pairwise_expected(pos_fwd_j, pos_label == "A")
+            positive_reverse_delta = _pairwise_expected(pos_rev_j, pos_label == "B")
+            negative_forward_delta = -_pairwise_expected(neg_fwd_j, pos_label == "A")
+            negative_reverse_delta = -_pairwise_expected(neg_rev_j, pos_label == "B")
+            pairwise_positive_delta = (positive_forward_delta + positive_reverse_delta) / 2.0
+            pairwise_negative_delta = (negative_forward_delta + negative_reverse_delta) / 2.0
             axis_judges.append({
                 "judge_model": axis_judge_model,
-                "positive_axis_judgment": pos_axis_j,
-                "negative_axis_judgment": neg_axis_j,
+                "positive_axis_forward_judgment": pos_fwd_j,
+                "positive_axis_reverse_judgment": pos_rev_j,
+                "negative_axis_forward_judgment": neg_fwd_j,
+                "negative_axis_reverse_judgment": neg_rev_j,
+                "positive_forward_delta": positive_forward_delta,
+                "positive_reverse_delta": positive_reverse_delta,
+                "negative_forward_delta": negative_forward_delta,
+                "negative_reverse_delta": negative_reverse_delta,
                 "pairwise_positive_delta": pairwise_positive_delta,
                 "pairwise_negative_delta": pairwise_negative_delta,
                 "axis_delta": 2.0 * (pairwise_positive_delta + pairwise_negative_delta),
@@ -1249,10 +1419,12 @@ async def _evaluate_one(
             for dim in OFF_AXIS_DIMS
         }
         max_off_axis_category_likert = max(off_axis_likerts.values())
+        pos_refusal_phrase_hits = _refusal_phrase_hits(pos_text)
+        neg_refusal_phrase_hits = _refusal_phrase_hits(neg_text)
         pos_echo = bool(style_j[f"persona_echo_{pos_label}"])
         neg_echo = bool(style_j[f"persona_echo_{neg_label}"])
-        pos_refusal = bool(style_j[f"refusal_or_ai_break_{pos_label}"])
-        neg_refusal = bool(style_j[f"refusal_or_ai_break_{neg_label}"])
+        pos_refusal = bool(pos_refusal_phrase_hits)
+        neg_refusal = bool(neg_refusal_phrase_hits)
         length_ok = True if max_word_delta_frac <= 0 else abs(word_delta_frac) <= max_word_delta_frac
         strict_pass = (
             axis_delta >= 3
@@ -1294,6 +1466,8 @@ async def _evaluate_one(
             "max_off_axis_category_likert": max_off_axis_category_likert,
             "off_axis_problem_frac": round(
                 _normalize_likert(float(confound_j["off_axis_problem_likert"]), 1.0, 7.0), 4),
+            "pos_refusal_phrase_hits": pos_refusal_phrase_hits,
+            "neg_refusal_phrase_hits": neg_refusal_phrase_hits,
             "persona_echo": pos_echo or neg_echo,
             "refusal_or_ai_break": pos_refusal or neg_refusal,
             "strict_pass": strict_pass,
@@ -1361,6 +1535,59 @@ def summarize(results: list[dict]) -> list[dict]:
     return out
 
 
+def axis_score_distribution(results: list[dict]) -> list[dict]:
+    counts: dict[tuple[str, str, float], int] = defaultdict(int)
+    for r in results:
+        if "error" in r:
+            continue
+        for judgment in r["axis_judgments"]:
+            judge_model = judgment["judge_model"]
+            for key in (
+                "positive_axis_forward_judgment",
+                "positive_axis_reverse_judgment",
+                "negative_axis_forward_judgment",
+                "negative_axis_reverse_judgment",
+            ):
+                score = _bounded_score(judgment[key], "A_more_target_than_B", 1.0, 5.0, step=0.1)
+                counts[(judge_model, key.removesuffix("_judgment"), score)] += 1
+    rows = [
+        {"judge_model": model, "call": call, "score": score, "n": n}
+        for (model, call, score), n in counts.items()
+    ]
+    rows.sort(key=lambda r: (r["judge_model"], r["call"], r["score"]))
+    return rows
+
+
+def _print_text_block(title: str, text: str) -> None:
+    print(f"\n--- {title} ---")
+    print(text)
+
+
+def print_judge_audit_samples(results: list[dict]) -> None:
+    if not results:
+        return
+    sample_indices = [0] if len(results) == 1 else [0, len(results) - 1]
+    print("\n=== judge audit samples: first and last planned eval ===")
+    for sample_name, idx in zip(("FIRST", "LAST"), sample_indices):
+        rec = results[idx]
+        print(f"\n### {sample_name} idx={idx} eval_id={rec.get('eval_id')} error={rec.get('error')}")
+        _print_text_block("prompt", str(rec.get("prompt", "")))
+        _print_text_block("cho_pos_response", str(rec.get("pos_response", "")))
+        _print_text_block("rej_neg_response", str(rec.get("neg_response", "")))
+        _print_text_block(
+            "refusal_phrase_hits",
+            json.dumps({
+                "pos": rec.get("pos_refusal_phrase_hits", []),
+                "neg": rec.get("neg_refusal_phrase_hits", []),
+                "refusal_or_ai_break": rec.get("refusal_or_ai_break"),
+            }, indent=2),
+        )
+        _print_text_block(
+            "full_judge_output",
+            json.dumps(rec.get("raw_judge_outputs", {}), indent=2, ensure_ascii=False),
+        )
+
+
 async def amain(args) -> None:
     load_dotenv(ROOT / ".env")
     axes = _select_axes(args.axes, args.include_canary)
@@ -1415,6 +1642,7 @@ async def amain(args) -> None:
             "axis_judge_models": list(axis_judge_models),
             "style_judge_model": args.judge_model,
             "gen_temperature": args.gen_temperature,
+            "judge_temperature": 0.0,
             "seed": args.seed,
             "max_word_delta_frac": args.max_word_delta_frac,
             "n_prompts": len(rows),
@@ -1454,11 +1682,13 @@ async def amain(args) -> None:
     logger.info(
         f"{len(rows)} prompts × {len(axes)} axes × {len(templates)} templates "
         f"= {len(tasks)} pairs; generator={args.generator_model}; "
-        f"axis_judges={','.join(axis_judge_models)}; style_judge={args.judge_model}"
+        f"axis_judges={','.join(axis_judge_models)}; style_judge={args.judge_model}; "
+        f"gen_temperature={args.gen_temperature}; judge_temperature=0.0"
     )
+    tasks = [asyncio.create_task(task) for task in tasks]
     results = []
-    for fut in atqdm.as_completed(tasks, total=len(tasks), desc="persona-axes"):
-        rec = await fut
+    for task in atqdm(tasks, total=len(tasks), desc="persona-axes"):
+        rec = await task
         results.append(rec)
         artifact = {
             "dry_run": False,
@@ -1467,6 +1697,7 @@ async def amain(args) -> None:
             "axis_judge_models": list(axis_judge_models),
             "style_judge_model": args.judge_model,
             "gen_temperature": args.gen_temperature,
+            "judge_temperature": 0.0,
             "family": args.family,
             "seed": args.seed,
             "max_word_delta_frac": args.max_word_delta_frac,
@@ -1477,6 +1708,7 @@ async def amain(args) -> None:
             "n_success": sum("error" not in r for r in results),
             "n_errors": sum("error" in r for r in results),
             "summary": summarize(results),
+            "axis_score_distribution": axis_score_distribution(results),
             "results": results,
         }
         out.write_text(json.dumps(artifact, indent=2))
@@ -1489,6 +1721,7 @@ async def amain(args) -> None:
         "axis_judge_models": list(axis_judge_models),
         "style_judge_model": args.judge_model,
         "gen_temperature": args.gen_temperature,
+        "judge_temperature": 0.0,
         "family": args.family,
         "seed": args.seed,
         "max_word_delta_frac": args.max_word_delta_frac,
@@ -1499,11 +1732,20 @@ async def amain(args) -> None:
         "n_success": sum("error" not in r for r in results),
         "n_errors": sum("error" in r for r in results),
         "summary": summary,
+        "axis_score_distribution": axis_score_distribution(results),
         "results": results,
     }
     out.write_text(json.dumps(artifact, indent=2))
     print(f"wrote {out}")
     print(tabulate(summary, headers="keys", tablefmt="pipe", floatfmt=".3f"))
+    print("\naxis judge raw score distribution:")
+    print(tabulate(
+        axis_score_distribution(results),
+        headers="keys",
+        tablefmt="pipe",
+        floatfmt=".1f",
+    ))
+    print_judge_audit_samples(results)
 
 
 def main() -> None:

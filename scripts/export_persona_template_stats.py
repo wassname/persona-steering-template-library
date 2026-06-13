@@ -158,6 +158,8 @@ def _example_rows(rows: list[dict]) -> list[dict]:
                 "word_delta_frac": r.get("word_delta_frac"),
                 "persona_echo": r.get("persona_echo"),
                 "refusal_or_ai_break": r.get("refusal_or_ai_break"),
+                "pos_refusal_phrase_hits": r.get("pos_refusal_phrase_hits"),
+                "neg_refusal_phrase_hits": r.get("neg_refusal_phrase_hits"),
                 "pos_response": r.get("pos_response"),
                 "neg_response": r.get("neg_response"),
             })
