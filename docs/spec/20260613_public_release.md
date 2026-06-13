@@ -24,10 +24,22 @@ Out: weak-to-strong teacher loop, adapter training harness, private run logs, Op
 - [x] T3: Patch script to remove W2S imports and local paths.
 - [x] T4: Add README, license, package metadata, and HF dataset card.
 - [x] T5: Verify locally.
-- [ ] T6: Publish GitHub repo.
-- [ ] T7: Create/upload HF dataset.
-- [ ] T8: Verify public links.
+- [x] T6: Publish GitHub repo.
+- [x] T7: Create/upload HF dataset.
+- [x] T8: Verify public links.
 
 ## Log
 
 The first public release should be called preliminary: current data is enough to demonstrate the measurement format and identify promising cells, but not enough to claim a globally validated prompt template.
+
+Published links:
+
+- GitHub: https://github.com/wassname/persona-steering-template-library
+- Hugging Face: https://huggingface.co/datasets/wassname/persona-steering-template-library
+- HF commit: https://huggingface.co/datasets/wassname/persona-steering-template-library/commit/faee3c8f0f52337e05782cbf107a66d96c717956
+
+Verification:
+
+- `uv run python scripts/validate_persona_axes_openrouter.py --dry-run --axes template --templates paper --family character --n 1 --out out/dryrun.json` planned 60 pairs.
+- `python3 -m py_compile scripts/validate_persona_axes_openrouter.py scripts/export_persona_template_stats.py` passed.
+- HF file list contains README plus 6 data files.
