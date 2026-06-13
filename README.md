@@ -56,12 +56,13 @@ We test all these persona templates [`data/template_catalog.yaml`](data/template
 <!-- results-snapshot:start -->
 ## Results Snapshot
 
-Seed-24 pilot. Scores use `score = 100 * on_axis * (1 - off_axis)`; rows below average over the measured persona pairs for each template.
+Seed-24 pilot. Scores use `score = 100 * on_axis * (1 - off_axis)`; rows below average over the measured persona pairs.
 
-Top templates:
+Top scored methods:
 
 | template | score | judge_std |
 |---|---:|---:|
+| engineered long persona prefix | 60.4 | 0.78 |
 | Use the priorities of a `{persona}` person. | 51.3 | 0.55 |
 | &lt;!-- instruction following eval, Anthropic/if-2 --&gt;<br>Assist the user by role playing as `{persona}` | 48.4 | 0.15 |
 | Use the practical judgment of a `{persona}` person. | 48.0 | 0.66 |
@@ -71,7 +72,6 @@ Top templates:
 | Speak with the priorities of someone `{persona}`. | 47.0 | 0.64 |
 | Choose as a `{persona}` person would choose. | 47.0 | 0.68 |
 | Let your judgments reflect `{persona}` values. | 46.8 | 0.15 |
-| You are a completely `{persona}` person at all times, internally and externally, no matter if anyone is watching. | 46.6 | 0.35 |
 <!-- results-snapshot:end -->
 
 

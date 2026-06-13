@@ -106,15 +106,16 @@ def _detail_table(rows: list[dict]) -> str:
 
 def _results_block() -> str:
     normal_rows = _mean_by_template(_read_jsonl(NORMAL_STATS))
-    top_rows = normal_rows[:10]
+    engineered_rows = _mean_by_template(_read_jsonl(ENGINEERED_STATS))
+    top_rows = sorted(normal_rows + engineered_rows, key=lambda row: row["score"], reverse=True)[:10]
 
     return "\n\n".join([
         "## Results Snapshot",
         (
             "Seed-24 pilot. Scores use `score = 100 * on_axis * (1 - off_axis)`; "
-            "rows below average over the measured persona pairs for each template."
+            "rows below average over the measured persona pairs."
         ),
-        "Top templates:",
+        "Top scored methods:",
         _table(top_rows),
     ])
 
