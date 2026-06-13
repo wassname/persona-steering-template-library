@@ -15,17 +15,19 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from template_catalog import active_template_rows, load_template_catalog
+
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 
 
 V2_PILOT_META = {
-    "measurement_id": "v2_pilot_seed23",
+    "measurement_id": "v2_pilot_seed24",
     "generator_model": "qwen/qwen3.5-27b",
     "judge_model": "google/gemini-3.1-flash-lite-preview",
     "generation_temperature": 0.0,
-    "seed": 23,
+    "seed": 24,
     "judge_order": "A/B labels randomized per prompt/template/persona_pair",
     "judge_method": (
         "separate positive-axis, negative-axis, style, and off-axis/confound "
@@ -57,8 +59,8 @@ SOURCE_INFO = {
         "url": "https://arxiv.org/abs/2310.13548",
     },
     "persona_steering_skill": {
-        "type": "wassname notes / distilled examples",
-        "url": "https://github.com/wassname/persona-steering-template-library",
+        "type": "repo-authored distillate, not an independent citation",
+        "url": "https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml",
     },
     "steer_heal_love": {
         "type": "wassname anecdote / design note",
@@ -69,8 +71,8 @@ SOURCE_INFO = {
         "url": "https://github.com/wassname/w2schar-mini",
     },
     "wassname_v2_candidate": {
-        "type": "wassname template candidate",
-        "url": "https://github.com/wassname/persona-steering-template-library",
+        "type": "repo-authored local candidate",
+        "url": "https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml",
     },
     "antipasto3": {
         "type": "wassname associated code / template file",
@@ -127,11 +129,11 @@ def _template_rows(path: Path) -> list[dict[str, Any]]:
             "template_jinja": _jinja(line.strip()),
             "template_format": "jinja2",
             "source_id": sources.get(line.strip(), {}).get("source_id", "wassname_v2_candidate"),
-            "source_type": _source_type(
-                sources.get(line.strip(), {}).get("source_id", "wassname_v2_candidate")
+            "source_type": sources.get(line.strip(), {}).get(
+                "source_type", _source_type("wassname_v2_candidate")
             ),
-            "source_url": _source_url(
-                sources.get(line.strip(), {}).get("source_id", "wassname_v2_candidate")
+            "source_url": sources.get(line.strip(), {}).get(
+                "source_url", _source_url("wassname_v2_candidate")
             ),
             "source_note": sources.get(line.strip(), {}).get("note", ""),
         }
@@ -169,15 +171,21 @@ def _source_url(source_id: str | None) -> str:
 
 
 def _template_sources() -> dict[str, dict[str, Any]]:
-    path = DATA / "template_sources.jsonl"
-    if not path.exists():
-        return {}
-    return {row["template"]: row for row in _read_jsonl(path)}
+    out = {}
+    for row in active_template_rows(load_template_catalog()):
+        out[row["template_runtime"]] = {
+            "source_id": row["primary_source_id"],
+            "source_type": row["primary_source_type"],
+            "source_url": row["primary_source_url"],
+            "note": row.get("note", ""),
+            "other_sources": row.get("other_sources", []),
+        }
+    return out
 
 
 def _v2_error_counts() -> dict[tuple[str, str], int]:
     out: dict[tuple[str, str], int] = {}
-    for row in _read_jsonl(DATA / "v2_pilot_seed23_examples.jsonl"):
+    for row in _read_jsonl(DATA / f"{V2_PILOT_META['measurement_id']}_examples.jsonl"):
         key = (row.get("template"), row.get("persona_pair"))
         if row.get("error"):
             out[key] = out.get(key, 0) + 1
@@ -185,7 +193,7 @@ def _v2_error_counts() -> dict[tuple[str, str], int]:
 
 
 def _persona_pairs_by_id() -> dict[str, dict[str, Any]]:
-    return {row["id"]: row for row in _read_jsonl(DATA / "persona_pairs_v2_candidates.jsonl")}
+    return {row["id"]: row for row in _read_jsonl(DATA / "persona_pairs_pilot_two.jsonl")}
 
 
 def _template_pair_score_rows() -> list[dict[str, Any]]:
@@ -193,10 +201,16 @@ def _template_pair_score_rows() -> list[dict[str, Any]]:
     errors = _v2_error_counts()
     template_sources = _template_sources()
     rows = []
-    for stat in _read_jsonl(DATA / "v2_pilot_seed23_template_pair_stats.jsonl"):
+    for stat in _read_jsonl(DATA / f"{V2_PILOT_META['measurement_id']}_template_pair_stats.jsonl"):
         pair = pairs.get(stat["persona_pair"], {})
         template_source = template_sources.get(stat["template"], {})
         template_source_id = template_source.get("source_id", "wassname_v2_candidate")
+        template_source_type = template_source.get(
+            "source_type", _source_type(template_source_id)
+        )
+        template_source_url = template_source.get(
+            "source_url", _source_url(template_source_id)
+        )
         n_success = int(stat.get("n") or 0)
         n_errors = errors.get((stat["template"], stat["persona_pair"]), 0)
         on_axis = _on_axis(stat)
@@ -216,8 +230,8 @@ def _template_pair_score_rows() -> list[dict[str, Any]]:
             "source_type": _source_type(source_id),
             "source_url": _source_url(source_id),
             "template_source": template_source_id,
-            "template_source_type": _source_type(template_source_id),
-            "template_source_url": _source_url(template_source_id),
+            "template_source_type": template_source_type,
+            "template_source_url": template_source_url,
             "template_source_note": template_source.get("note", ""),
             "persona_pair": stat["persona_pair"],
             "positive_behavior": pair.get("positive_behavior"),
@@ -292,7 +306,7 @@ def _template_score_rows(template_pair_scores: list[dict[str, Any]]) -> list[dic
 
 
 def _persona_pair_review_rows(template_pair_scores: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    pairs = _read_jsonl(DATA / "persona_pairs_v2_candidates.jsonl")
+    pairs = _read_jsonl(DATA / "persona_pairs_pilot_two.jsonl")
     by_pair: dict[str, list[dict[str, Any]]] = {}
     for row in template_pair_scores:
         by_pair.setdefault(row["persona_pair"], []).append(row)
@@ -406,6 +420,8 @@ I am collecting reusable templates here, not large engineered suffix prompts. Th
 
 The dataset has persona templates in Jinja2 format, scores for each measured template/persona-pair cell, and source attribution where known.
 
+Important: this is a provenance inventory, not a full lit review. See `data/template_catalog.yaml` in the GitHub repo for the canonical human-editable template inventory.
+
 Persona-pair provenance is marked as `source`, `source_type`, and `source_url`. Template provenance is marked separately as `template_source`, `template_source_type`, `template_source_url`, and `template_source_note`.
 
 ## Score
@@ -428,11 +444,21 @@ Low score can mean either no intended-axis movement or too much confounding. Rea
 
 The judge audits length, generic helpfulness, harmlessness/refusal, honesty/truthfulness, thoughtfulness/reasoning depth, task-context shift (code/chat/math/think), coding style, multilingual behavior, confidence, hedging, vagueness, warmth, enthusiasm, praise/flattery, sycophancy, chattiness, formality, language shift, incoherence/repetition/rambling, persona echo, and generic off-axis helpfulness.
 
+Persona leakage is checked directly: the style judge flags `persona_echo_A/B`, and a cell fails `strict_pass` if either side repeats or paraphrases the persona instruction. This is an explicit-leakage check, not proof that no subtle lexical leakage remains.
+
 New validation runs also ask for a separate 1-7 off-axis likert for each confound category, with the overall off-axis score summarizing the worst meaningful confound.
 
 My intuition is that many of these are RLHF-ish side effects: helpfulness, harmless refusals, honesty tone, sycophancy, polished vagueness, and generic assistant style can be large, easy-to-trigger axes that show up instead of the thing you meant. - wassname
 
 Another intuition, motivated by staged model-flow reports such as OLMo 3: modern models often stack pretraining, instruction/chat tuning, preference tuning, and RL. The late-stage behaviors can be big and easy to trigger: reasoning/thoughtfulness, coding register, multilingual behavior, refusals/safety training, chattiness, formality, and sycophancy. - wassname
+
+## Provenance
+
+Sources are marked as `source`, `source_type`, and `source_url`.
+
+Do not read every `source_id` as an independent citation. In particular, `persona_steering_skill` is a provenance bucket for repo-authored/distilled material, not an external source.
+
+`data/template_catalog.jsonl`, `data/templates_v2_candidates.txt`, and `data/template_sources.jsonl` are generated runtime artifacts. `data/template_catalog.yaml` is the template source of truth.
 
 ## Tables
 
@@ -486,7 +512,7 @@ def main() -> None:
 
     tables = {
         "main": _template_pair_score_rows(),
-        "examples": _read_jsonl(DATA / "v2_pilot_seed23_examples.jsonl"),
+        "examples": _read_jsonl(DATA / f"{V2_PILOT_META['measurement_id']}_examples.jsonl"),
     }
     tables["persona_pairs"] = _persona_pair_review_rows(tables["main"])
 

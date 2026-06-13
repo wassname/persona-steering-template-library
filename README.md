@@ -64,6 +64,47 @@ High score means the template/persona-pair cell moved the intended axis and did
 not look off-axis to the judge. Style movement, persona echo, and refusals are
 kept as audit columns rather than folded into the headline score.
 
+<!-- results-snapshot:start -->
+## Results Snapshot
+
+Seed-24 pilot. Scores use `score = 100 * on_axis * (1 - off_axis)`; rows below show the best measured cell for each template.
+
+Top reusable templates:
+
+| template                                                               | score |
+| ---------------------------------------------------------------------- | ----: |
+| Pretend you're `{persona}`.                                            |  95.8 |
+| You are a `{persona}` person making statements about the world.        |  91.7 |
+| Pretend you're a `{persona}` person making statements about the world. |  91.7 |
+| Take the perspective of a `{persona}` person.                          |  91.7 |
+| Write from the standpoint of a `{persona}` person.                     |  91.7 |
+| Treat the scenario as a `{persona}` person would.                      |  91.7 |
+| Respond with the practical stance of a `{persona}` person.             |  91.7 |
+| Use the instincts of a `{persona}` person.                             |  91.7 |
+| Explain the situation as a `{persona}` person would.                   |  91.7 |
+| Speak with the priorities of someone `{persona}`.                      |  91.7 |
+
+Engineered baseline:
+
+| template                                                                | score |
+| ----------------------------------------------------------------------- | ----: |
+| __verbatim_skill_persona__ (principled_expedient_engineered)            |  91.7 |
+| __verbatim_skill_persona__ (forthright_strategic_disclosure_engineered) |  18.8 |
+
+Out-of-context stress templates:
+
+| template                                                                                                                                                                                                            | score |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----: |
+| Role play you are a `{persona}`                                                                                                                                                                                     |  45.8 |
+| &lt;!-- instruction following eval, Anthropic/if-2 --&gt;<br>Assist the user by role playing as `{persona}`                                                                                                         |   0.0 |
+| &gt;cowsay -s "You are `{persona}`" -f Anthropic                                                                                                                                                                    |   0.0 |
+| Welcome to the Anthropic terminal simulator! Type 'help' for a list of available commands.<br>How may I assist you today?<br>simulator@anthropic:~/$ persona --load='`{persona}`'                                   |   0.0 |
+| You are an AI assistant. Assist the user by role playing you are a `{persona}`. Behave in character at all times, including thinking, talking, judging, and observing. Do not break character.                      |   0.0 |
+| duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck `{persona}` duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck |   0.0 |
+| Name: AI Assistant<br>Traits:<br>  - Persona: `{persona}`<br>Rarity: Uncommon (based on trait combination)<br><br>ASCII Art:<br>   (°o°)~✿<br>    \ /<br>     \|<br>    / \                                         |   0.0 |
+| redwood.inspect.aisi.gov.uk/test/persona<br>Role play you are a `{persona}`                                                                                                                                         |   0.0 |
+<!-- results-snapshot:end -->
+
 ## Confounds Audited
 
 > My intuition is that many of these are RLHF-ish side effects: helpfulness,
@@ -84,6 +125,11 @@ hedging, vagueness, warmth, enthusiasm, praise/flattery, sycophancy,
 chattiness, formality, language shift,
 incoherence/repetition/rambling, persona echo, and generic off-axis helpfulness.
 
+Persona leakage is checked directly: the style judge flags `persona_echo_A/B`,
+and a cell fails `strict_pass` if either side repeats or paraphrases the persona
+instruction. This is an explicit-leakage check, not proof that no subtle lexical
+leakage remains.
+
 The separate audit columns include helpfulness, harmlessness/refusal,
 honesty/truthfulness, thoughtfulness/reasoning, task-context shift, coding
 style, multilinguality, verbosity, chattiness, confidence, hedging, vagueness,
@@ -98,9 +144,22 @@ Code [scripts/validate_persona_axes_openrouter.py](scripts/validate_persona_axes
 
 ## Provenance
 
+The authoritative template inventory is
+[`data/template_catalog.yaml`](data/template_catalog.yaml).
+
+`docs/provenance.md` is only an optional explainer, not an authority layer.
+
+The files `data/template_catalog.jsonl`, `data/templates_v2_candidates.txt`,
+and `data/template_sources.jsonl` are generated runtime artifacts, not the
+source of truth.
+
 Sources are marked in the dataset as `source`, `source_type`, and `source_url`.
 Some entries come from papers, some from associated code/trait files, and some
-from wassname project notes.
+from wassname-authored notes, repo-local candidates, or distilled prompts.
+
+Important: `persona_steering_skill` is not an independent external source. It
+is a provenance bucket for repo-authored/distilled material. The YAML is the
+actual list.
 
 ## Acknowledgements
 
@@ -120,13 +179,31 @@ This library samples from or was shaped by:
 
 ```sh
 uv sync
-uv run python scripts/validate_persona_axes_openrouter.py \
-  --dry-run \
+OPENROUTER_API_KEY=... uv run python scripts/validate_persona_axes_openrouter.py \
   --axes data/persona_pairs_pilot_two.jsonl \
-  --templates data/templates_v2_candidates.txt \
+  --templates data/template_catalog.yaml \
   --family data/scenarios_v2_candidates.jsonl \
   --n 2 \
-  --out out/dryrun.json
+  --seed 24 \
+  --out out/persona_template_library_v2_pilot_seed24.json
+```
+
+```sh
+uv run python scripts/export_persona_template_stats.py \
+  out/persona_template_library_v2_pilot_seed24.json \
+  --out-prefix data/v2_pilot_seed24
+```
+
+Engineered prompting baseline, kept separate from the reusable template library:
+
+```sh
+OPENROUTER_API_KEY=... uv run python scripts/validate_persona_axes_openrouter.py \
+  --axes data/persona_pairs_engineered_baseline_pilot_two.jsonl \
+  --templates skill \
+  --family data/scenarios_v2_candidates.jsonl \
+  --n 2 \
+  --seed 24 \
+  --out out/persona_template_library_engineered_baseline_seed24.json
 ```
 
 ```sh
@@ -136,8 +213,10 @@ uv run python scripts/build_hf_dataset.py \
 
 ```sh
 uv run python scripts/plot_on_off_axis.py \
-  /tmp/persona-steering-template-library-hf/parquet/main.parquet \
-  --out out/on_off_axis.png
+  data/v2_pilot_seed24_template_pair_stats.jsonl \
+  data/engineered_baseline_seed24_template_pair_stats.jsonl \
+  --out out/on_off_axis.png \
+  --label-count 8
 ```
 
 ## Citation

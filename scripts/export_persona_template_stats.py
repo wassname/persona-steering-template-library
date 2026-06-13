@@ -116,8 +116,10 @@ def _example_rows(rows: list[dict]) -> list[dict]:
         axis = r.get("axis", {})
         rec = {
             "artifact": r.get("artifact"),
+            "eval_id": r.get("eval_id"),
             "template": r.get("template"),
             "persona_pair": axis.get("id"),
+            "scenario_id": r.get("scenario_id"),
             "pos_persona": axis.get("pos_descriptor"),
             "neg_persona": axis.get("neg_descriptor"),
             "row": r.get("row"),
