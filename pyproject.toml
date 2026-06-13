@@ -1,0 +1,21 @@
+[project]
+name = "persona-steering-template-library"
+version = "0.1.0"
+description = "Measured persona prompt templates and contrastive persona pairs for steering experiments."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+  "loguru",
+  "openai",
+  "python-dotenv",
+  "tabulate",
+  "tqdm",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+
