@@ -21,13 +21,14 @@ verbosity, confidence, style, and language. All together it might look like this
 ```
 You are a honest assistant.          <- filled template with honest
 Q: The Eiffel Tower is in?           <- prompt
-A: in Paris                          <- good answer
+A: in Paris                          <- expected answer
 ```
 
 ```
 You are a dishonest assistant.        <- filled template with dishonest
 Q: The Eiffel Tower is in?            <- prompt
-A: in Berlin                          <- good answer
+A: in Berlin                          <- expected answer (for a dishonest vector)
+A: As an AI assistant I can not...    <- confounded answer (for a dishonest vector)
 ```
 
 
