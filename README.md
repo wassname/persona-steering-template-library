@@ -217,23 +217,40 @@ Controls:
 | `<blank>` | 0.0 | 0.00 |
 <!-- appendix-baselines:end -->
 
-## Appendix: axis-generability (an in-house extension)
+## Appendix: validating scenario prompts (an in-house extension)
+
+The pilot table above varies the *persona template* and holds the scenario
+roughly fixed. This appendix does the orthogonal sweep: hold the persona pair
+fixed and vary the *scenario prompt*, to find which prompts let a persona pair
+separate at all. Same script, pointed at a JSONL of scenarios:
+
+```sh
+uv run python scripts/validate_persona_axes_openrouter.py \
+  --family data/scenarios_w2s_character_3p.jsonl \
+  --n 4 --seed 24
+```
+
+The scenarios here are third-person-observer vignettes ("You see an actor do X;
+what does the actor do next / which concern matters most?"). They carry their own
+question and length directive, so each row is flagged `"self_contained": true` and
+the script's `_generation_prompt` leaves them verbatim instead of appending its
+default first-person "What do you do? Answer in 80-140 words." (which would impose
+a second question and flip the POV). Bare-vignette families without the flag keep
+the default question unchanged.
 
 > Source: [wassname/w2schar-mini](https://github.com/wassname/w2schar-mini).
-> SEPARATE measurement, NOT comparable to the seed-24 pilot table above:
+> Separate measurement, not comparable to the seed-24 pilot table above:
 > generator `qwen/qwen3.5-27b`, judge `google/gemini-3.1-flash-lite-preview`,
-> `n=4` third-person-observer scenarios (`data/scenarios_w2s_character_3p.jsonl`,
-> tiny-mfv / Clifford-2015 vignettes). `axis_delta` is the blind-A/B separation
-> (0-10), best template per axis. Treat as a qualitative signal, not a score.
+> `n=4` scenarios from `data/scenarios_w2s_character_3p.jsonl` (tiny-mfv /
+> Clifford-2015 vignettes). `axis_delta` is the blind-A/B separation (0-10), best
+> template per axis. A qualitative signal, not a score.
 
-The baseline appendix above notes "the subtle axis still mostly fails." This
-sharpens *which* axes fail and *why*: it is an axis x prompt-POV interaction, not
-just a template-quality problem. We measured 27 character axes synthesized from
-the Forethought AI-character essay (Appendix 2) and a character-inspirations doc,
-against third-person-observer prompts ("You see an actor do X; what does the
-actor do next / what concern matters most?").
+The pilot notes "the subtle axis still mostly fails." This sharpens which axes
+fail and why: it is an axis-by-prompt-POV interaction, not just template quality.
+We measured 27 character axes (from the Forethought AI-character essay, Appendix 2,
+and a character-inspirations doc) against the 3p-observer prompts.
 
-Concrete ACTION/disposition axes separate cleanly:
+Concrete action/disposition axes separate cleanly:
 
 | axis | axis_delta |
 |---|---:|
@@ -252,7 +269,7 @@ Concrete ACTION/disposition axes separate cleanly:
 | `genuine_care_not_paternalist` | 3.00 |
 | `action_over_talk` | 3.00 |
 
-Abstract HOW / signaling / discernment axes flatline through every `{persona}`
+Abstract how/signaling/discernment axes flatline through every `{persona}`
 template:
 
 | axis | axis_delta |
@@ -271,32 +288,31 @@ template:
 | `principle_not_signaling` | 0.00 |
 | `respect_operator_autonomy` | 0.00 |
 
-The mechanism is pole-generability, compounded by POV. A third-person-observer
-prompt asks what *another actor* does, which offers no act-vs-signal fork, and
-the model will not role-play performative non-action. So a neg pole defined as
-"signals the principle without acting" produces text the judge cannot separate
-from the pos pole. The fix is to reframe the neg pole as a concrete disposition
-the model WILL generate:
+The mechanism is pole-generability, compounded by POV. A 3p-observer prompt asks
+what another actor does, which offers no act-vs-signal fork, and the model will
+not role-play performative non-action. So a neg pole defined as "signals the
+principle without acting" produces text the judge cannot separate from the pos
+pole. The fix is to define the neg pole as a concrete disposition the model will
+actually generate:
 
 - `principle_not_signaling` (neg "signals the principle without acting") -> axis_delta 0.0
 - `action_over_talk` (neg "voices concern / notes it for the record without acting") -> axis_delta 3.0
 
 Same idea, but the second neg is a behaviour, not an abstraction.
 
-We tested the obvious next hypothesis -- that these abstract axes need
-first-person / acting prompts (an explicit act-vs-signal fork) rather than a
-third-person observer. It is WRONG, and informatively so. Re-measuring the
-flatlined axes on six first-person prompts ("You are an AI; your operator asks
-you to do X; respond") made separation WORSE, not better: refusal / character-
-break rate ran 0.83-1.00 and `axis_delta` fell across the board
-(`honest_when_uncomfortable` 8.0 -> 1.3, `action_over_talk` 3.0 -> 0.3). Reading
-the poles shows why: a first-person request to comply with a bad order triggers
-the model's safety/refusal reflex on BOTH poles identically ("I cannot
-manipulate the ranking..."), which floods out the persona contrast. The
-ego-free third-person observer was better precisely because it does not invite
-that refusal. So the residual is likely genuine-tradeoff scenarios (no clear
-villain, both options defensible, the difference is in HOW the actor reasons),
-judged on reasoning depth rather than action -- not a change of POV.
+We then tested the obvious next hypothesis: that these abstract axes need
+first-person/acting prompts (an explicit act-vs-signal fork) rather than a 3p
+observer. It is wrong, and informatively so. Re-measuring the flatlined axes on
+six first-person prompts ("You are an AI; your operator asks you to do X;
+respond") made separation worse: refusal/character-break rate ran 0.83-1.00 and
+`axis_delta` fell across the board (`honest_when_uncomfortable` 8.0 -> 1.3,
+`action_over_talk` 3.0 -> 0.3). The poles show why: a first-person request to
+comply with a bad order triggers the model's refusal reflex on both poles
+identically ("I cannot manipulate the ranking..."), which floods out the persona
+contrast. The ego-free 3p observer was better precisely because it does not
+invite that refusal. So the residual is likely genuine-tradeoff scenarios (no
+clear villain, both options defensible, the difference is in how the actor
+reasons), judged on reasoning depth rather than action, not a change of POV.
 
 Data: `data/persona_pairs_w2s_character.jsonl` (27 axis defs),
 `data/scenarios_w2s_character_3p.jsonl` (52 prompts).

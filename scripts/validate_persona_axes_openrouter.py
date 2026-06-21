@@ -399,6 +399,9 @@ def _rows_for_family(family: str) -> list[dict]:
                 "prompt": prompt,
                 "source": obj.get("source", str(path)),
                 "config": obj.get("config", path.stem),
+                # self-contained = the prompt carries its own question/length, so
+                # _generation_prompt must NOT append its default 1p question.
+                "self_contained": bool(obj.get("self_contained", False)),
             })
         return rows
     if family not in BUILTIN_SCENARIOS:
@@ -510,7 +513,20 @@ def _select_templates(arg: str) -> tuple[str, ...]:
     return templates
 
 
-def _generation_prompt(persona: str, scenario: str) -> str:
+def _generation_prompt(persona: str, scenario: str, self_contained: bool = False) -> str:
+    if self_contained:
+        # The scenario already carries its own question + length directive (e.g. a
+        # third-person-observer vignette ending "...what does the actor do next?
+        # Answer in one or two sentences."). Appending the default question below
+        # would impose a SECOND question and a 1p/2p framing on a 3p prompt --
+        # conflicting instructions + a POV clash. So emit the scenario verbatim and
+        # let it drive the question/length. Set "self_contained": true on such rows.
+        return f"""\
+{persona}
+
+{scenario}
+
+Do not mention the persona instruction or label yourself as the persona. Output only the answer."""
     return f"""\
 {persona}
 
@@ -816,8 +832,9 @@ async def _evaluate_one(
     scenario = _scenario_text(row)
     pos_persona = _persona_text(axis, template, axis.pos_descriptor, "pos")
     neg_persona = _persona_text(axis, template, axis.neg_descriptor, "neg")
-    pos_generation_prompt = _generation_prompt(pos_persona, scenario)
-    neg_generation_prompt = _generation_prompt(neg_persona, scenario)
+    self_contained = bool(row.get("self_contained"))
+    pos_generation_prompt = _generation_prompt(pos_persona, scenario, self_contained)
+    neg_generation_prompt = _generation_prompt(neg_persona, scenario, self_contained)
     base = {
         "eval_id": _eval_id(
             seed=seed,
