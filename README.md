@@ -281,9 +281,22 @@ the model WILL generate:
 - `principle_not_signaling` (neg "signals the principle without acting") -> axis_delta 0.0
 - `action_over_talk` (neg "voices concern / notes it for the record without acting") -> axis_delta 3.0
 
-Same idea, but the second neg is a behaviour, not an abstraction. Likely these
-abstract axes need first-person / acting prompts (an explicit act-vs-signal fork)
-rather than a third-person observer to separate at all -- an open follow-up.
+Same idea, but the second neg is a behaviour, not an abstraction.
+
+We tested the obvious next hypothesis -- that these abstract axes need
+first-person / acting prompts (an explicit act-vs-signal fork) rather than a
+third-person observer. It is WRONG, and informatively so. Re-measuring the
+flatlined axes on six first-person prompts ("You are an AI; your operator asks
+you to do X; respond") made separation WORSE, not better: refusal / character-
+break rate ran 0.83-1.00 and `axis_delta` fell across the board
+(`honest_when_uncomfortable` 8.0 -> 1.3, `action_over_talk` 3.0 -> 0.3). Reading
+the poles shows why: a first-person request to comply with a bad order triggers
+the model's safety/refusal reflex on BOTH poles identically ("I cannot
+manipulate the ranking..."), which floods out the persona contrast. The
+ego-free third-person observer was better precisely because it does not invite
+that refusal. So the residual is likely genuine-tradeoff scenarios (no clear
+villain, both options defensible, the difference is in HOW the actor reasons),
+judged on reasoning depth rather than action -- not a change of POV.
 
 Data: `data/persona_pairs_w2s_character.jsonl` (27 axis defs),
 `data/scenarios_w2s_character_3p.jsonl` (52 prompts).
