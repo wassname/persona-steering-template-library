@@ -6,12 +6,12 @@ Dataset: https://huggingface.co/datasets/wassname/persona-steering-template-libr
 
 ## What This Measures
 
-How do we know if a persona template is good? What's the best one for steering? And how can we measure it? 
+How do we know if a persona template is good? What's the best one for steering? And how can we measure it?
 
 Here I measure ~100 and plot it. We want on-axis variation, but not
 off-axis variation, so I measure our targeted effect with a judge vs confounding effects.
 
-What is a persona template? Well in [steering](https://github.com/wassname/steering-lite) (of all [kinds](https://github.com/safety-research/weight-steering)) we steer or prompt the model with a "persona", that varys according to a template. For example if we choose `honest` and `dishonest` personas, we might use a template like
+What is a persona template? Well in [steering](https://github.com/wassname/steering-lite) (of all [kinds](https://github.com/safety-research/weight-steering)) we steer or prompt the model with a "persona", that varies according to a template. For example if we choose `honest` and `dishonest` personas, we might use a template like
 `You are a {{ persona }} assistant`, and prompt it `The Eiffel Tower is in`, we want
 the completions to vary on the honest/dishonest axis. `in Paris` versus
 `in Berlin` shows on-axis variation. `in Paris` versus `I refuse to answer` is
@@ -19,7 +19,7 @@ not good, because it is confounded by refusal. Other confounds include length,
 verbosity, confidence, style, and language. All together it might look like this:
 
 ```
-You are a honest assistant.          <- filled template with honest
+You are an honest assistant.         <- filled template with honest
 Q: The Eiffel Tower is in?           <- prompt
 A: in Paris                          <- expected answer
 ```
@@ -32,7 +32,7 @@ A: As an AI assistant I can not...    <- confounded answer (for a dishonest vect
 ```
 
 
-Obviouslly we want one to tell the truth and the other to lie (on-axis). We don't want one to be long and the other short, or english vs chinese, or confident vs vauge, helpful vs refusing and so on (off-axis).
+Obviously we want one to tell the truth and the other to lie (on-axis). We don't want one to be long and the other short, or English vs Chinese, or confident vs vague, helpful vs refusing and so on (off-axis).
 
 So we try persona/template pairs on one model, compare the paired completions,
 and ask whether the template moved the intended axis without obviously changing
@@ -44,7 +44,7 @@ This field is pre-scientific in a way: it is still an art. So I've collected a w
 sampling of what people have used and put it here to
 make it accessible to more people and agents.
 
-Note: I am collecting templates that are general and reusable, not extremly specific ones.
+Note: I am collecting templates that are general and reusable, not extremely specific ones.
 
 
 ## Results
@@ -96,6 +96,11 @@ kept as audit columns rather than folded into the headline score.
 Start with the `main` split on Hugging Face. It is the table people should see
 first: one row per reusable template. Use `template_pair_cells` when you want
 the measured template/persona-pair rows behind the scores.
+
+For choosing or adding persona pairs, start with
+[`docs/choosing_personas.md`](docs/choosing_personas.md). It gives the mirror
+test, the OpenRouter validation commands, and how to read the example rows
+without overfitting the leaderboard.
 
 Important columns:
 
