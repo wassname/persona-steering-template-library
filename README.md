@@ -101,6 +101,8 @@ For choosing or adding persona pairs, start with
 [`docs/choosing_personas.md`](docs/choosing_personas.md). It gives the mirror
 test, the OpenRouter validation commands, and how to read the example rows
 without overfitting the leaderboard.
+For the annotated "what other systems used" notes, see
+[`docs/persona_prompt_prior_art.md`](docs/persona_prompt_prior_art.md).
 
 Important columns:
 
@@ -123,6 +125,8 @@ Then check `examples` to see the paired completions behind the score.
 
 The authoritative template inventory is
 [`data/template_catalog.yaml`](data/template_catalog.yaml).
+The readable prior-art guide is
+[`docs/persona_prompt_prior_art.md`](docs/persona_prompt_prior_art.md).
 
 ## Off-axis confounds considered
 
@@ -148,7 +152,8 @@ This library samples from or was shaped by:
 - sycophancy literature: https://arxiv.org/abs/2310.13548
 - OLMo 3 report: https://arxiv.org/abs/2512.13961
 - wassname/AntiPaSTO: https://github.com/wassname/AntiPaSTO
-- more in [`data/template_catalog.yaml`](data/template_catalog.yaml).
+- annotated guide: [`docs/persona_prompt_prior_art.md`](docs/persona_prompt_prior_art.md)
+- full inventory: [`data/template_catalog.yaml`](data/template_catalog.yaml)
 
 ## Citation
 

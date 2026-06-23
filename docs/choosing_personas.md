@@ -17,6 +17,8 @@ style, length, refusal posture, and task mode as matched as possible.
 - `data/persona_pairs_pilot_two.jsonl`: measured pilot pairs.
 - `data/persona_pairs_v2_candidates.jsonl`: candidate pairs not necessarily in
   the headline run.
+- `docs/persona_prompt_prior_art.md`: annotated examples of what existing
+  steering repos and papers used.
 - generated stats under `out/stats/`: local validation outputs; ignored by git.
 - Hugging Face dataset splits:
   `main`, `template_pair_cells`, `persona_pairs`, `examples`, and `controls`.
@@ -24,8 +26,9 @@ style, length, refusal posture, and task mode as matched as possible.
 ## Evidence Base
 
 This guide distills the older w2schar notes on writing personas and rewriting
-pairs, plus the newer `persona-steering` skill. The newer skill is stronger
-because it separates source types and examples:
+pairs. The repo-local prior-art notes are in
+[`docs/persona_prompt_prior_art.md`](persona_prompt_prior_art.md); they separate
+source types and examples:
 
 - repeng is the clearest source for direct-opposite phrasing, including the
   "high on acid" / "sober, not on acid" example.
@@ -38,6 +41,11 @@ because it separates source types and examples:
 
 Use this ordering when sources disagree: working code and repeated external use,
 then paper claims, then in-house iteration notes.
+
+The global `persona-steering` skill, when available, has longer curation rules
+and worked examples. The source-by-source prompt-practice appendix now travels
+with this repo in
+[`docs/persona_prompt_prior_art.md`](persona_prompt_prior_art.md).
 
 ## Pick A Persona Pair
 

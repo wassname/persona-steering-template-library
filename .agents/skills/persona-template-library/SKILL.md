@@ -11,6 +11,8 @@ persona-pair selection, OpenRouter validation runs, or dataset export.
 ## Canonical Files
 
 - `docs/choosing_personas.md`: workflow for choosing personas and templates.
+- `docs/persona_prompt_prior_art.md`: annotated prior art for persona prompt
+  shapes used by steering repos and papers.
 - `data/template_catalog.yaml`: reusable template inventory.
 - `data/persona_pairs_pilot_two.jsonl`: measured pilot persona pairs.
 - `data/persona_pairs_v2_candidates.jsonl`: candidate persona pairs.
@@ -25,15 +27,17 @@ persona-pair selection, OpenRouter validation runs, or dataset export.
 ## Workflow
 
 1. Read `docs/choosing_personas.md`.
-2. If the global `persona-steering` skill is available, read it too; it has the
+2. Read `docs/persona_prompt_prior_art.md` when choosing new persona pairs or
+   template shapes from prior work.
+3. If the global `persona-steering` skill is available, read it too; it has the
    longer literature notes, curation rules, and worked examples behind this
    repo's shorter guide.
-3. Choose candidate persona pairs by mirror-testing them: each positive clause
+4. Choose candidate persona pairs by mirror-testing them: each positive clause
    needs a negative counterpart that only flips the intended pole.
-4. Choose candidate templates that bind the persona to behavior, judgment, or
+5. Choose candidate templates that bind the persona to behavior, judgment, or
    perspective rather than pure identity.
-5. Run a dry-run validator command before live OpenRouter calls.
-6. After a live run, export stats and inspect examples before trusting scores.
+6. Run a dry-run validator command before live OpenRouter calls.
+7. After a live run, export stats and inspect examples before trusting scores.
 
 The steering arithmetic matters: a direction is the average positive-minus-
 negative difference. Any systematic length, refusal, formality, confidence,

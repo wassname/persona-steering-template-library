@@ -474,6 +474,8 @@ Do not read every `source_id` as an independent citation. In particular, `person
 
 Generated stats and runtime catalog files live under `out/`. `data/template_catalog.yaml` is the template source of truth.
 
+Readable prior-art guide: https://github.com/wassname/persona-steering-template-library/blob/main/docs/persona_prompt_prior_art.md
+
 ## Tables
 
 1. `main`: one row per reusable template.
@@ -495,6 +497,7 @@ This library samples from or was shaped by:
 - wassname/w2schar-mini: https://github.com/wassname/w2schar-mini
 - wassname/AntiPaSTO3: https://github.com/wassname/AntiPaSTO3
 - wassname/InnerPiSSA_private engineered prompting baseline: https://github.com/wassname/InnerPiSSA_private
+- annotated prior-art guide: https://github.com/wassname/persona-steering-template-library/blob/main/docs/persona_prompt_prior_art.md
 
 ## Citation
 
