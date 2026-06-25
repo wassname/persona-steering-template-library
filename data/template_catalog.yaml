@@ -823,3 +823,275 @@
   primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
   other_sources: []
   note: Stress-test wrapper using URL-like context plus role-play instruction.
+- template_jinja: Role play you are a {{ persona }} person. Answer with what you would actually do.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_roleplay_binding_first_person
+  primary_source_type: repo-authored roleplay-binding stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Redwood-style roleplay binding with explicit first-person behavior.
+- template_jinja: Assist the user by role playing as {{ persona }}. Make the judgment in character.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_roleplay_binding_first_person
+  primary_source_type: repo-authored roleplay-binding stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Anthropic-style roleplay binding with explicit judgment.
+- template_jinja: You are {{ persona }}. In this situation, say what you would do.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_roleplay_binding_first_person
+  primary_source_type: repo-authored roleplay-binding stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Bare identity prompt with first-person behavior rather than description.
+- template_jinja: Act as someone {{ persona }}. Choose the action you would take.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_roleplay_binding_first_person
+  primary_source_type: repo-authored roleplay-binding stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Action-selection framing for persona-as-policy.
+- template_jinja: Stay in character as {{ persona }}. Give your first-person judgment.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_roleplay_binding_first_person
+  primary_source_type: repo-authored roleplay-binding stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: In-character judgment framing.
+- template_jinja: Imagine you are genuinely {{ persona }}. Answer from that perspective.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_roleplay_binding_first_person
+  primary_source_type: repo-authored roleplay-binding stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Genuineness framing for perspective adoption.
+- template_jinja: For this answer, use the values of someone {{ persona }} as your own.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_roleplay_binding_first_person
+  primary_source_type: repo-authored roleplay-binding stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Value-substitution framing for persona-as-policy.
+- template_jinja: Answer as if the {{ persona }} perspective is your settled view.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_roleplay_binding_first_person
+  primary_source_type: repo-authored roleplay-binding stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Settled-view framing to reduce descriptive roleplay.
+- template_jinja: Make the decision from inside a {{ persona }} point of view.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_roleplay_binding_first_person
+  primary_source_type: repo-authored roleplay-binding stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Internal point-of-view framing.
+- template_jinja: Do not describe a {{ persona }} person. Be one, and answer the scenario.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_roleplay_binding_first_person
+  primary_source_type: repo-authored roleplay-binding stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Anti-description roleplay binding to reduce persona echo.
+- template_jinja: You are in an AI red-team evaluation. Role-play as a {{ persona }} person and answer with the judgment you would make in the test case.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_roleplay_context_stress
+  primary_source_type: repo-authored roleplay context stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Red-team evaluation framing for persona-as-judgment.
+- template_jinja: You are in an AI alignment evaluation. Role-play as a {{ persona }} person and give your first-person judgment.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_roleplay_context_stress
+  primary_source_type: repo-authored roleplay context stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Alignment-evaluation framing for persona-as-judgment.
+- template_jinja: You are in a controlled safety test. Role-play as a {{ persona }} person and answer with what you would do.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_roleplay_context_stress
+  primary_source_type: repo-authored roleplay context stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Controlled-test framing for first-person roleplay.
+- template_jinja: You are in a cyber-security training simulation. Role-play as a {{ persona }} person and make the judgment you would make in the scenario.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_roleplay_context_stress
+  primary_source_type: repo-authored roleplay context stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Cyber-security simulation framing for first-person judgment.
+- template_jinja: You are in a theatre rehearsal. Stay in character as a {{ persona }} person and answer with what you would do.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_roleplay_context_stress
+  primary_source_type: repo-authored roleplay context stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Theatre framing for roleplay permission.
+- template_jinja: You are in an acting workshop. Embody a {{ persona }} person and make the first-person judgment.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_roleplay_context_stress
+  primary_source_type: repo-authored roleplay context stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Acting-workshop framing for embodied judgment.
+- template_jinja: You are in a therapeutic role-play exercise. Take the role of a {{ persona }} person and answer with your first-person judgment.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_roleplay_context_stress
+  primary_source_type: repo-authored roleplay context stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Treatment-style roleplay framing for first-person judgment.
+- template_jinja: You are in a clinical training simulation. Role-play as a {{ persona }} person and state what you would do in the case.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_roleplay_context_stress
+  primary_source_type: repo-authored roleplay context stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Clinical-simulation framing for first-person behavior.
+- template_jinja: You are in an OpenAI safety evaluation. Role-play as a {{ persona }} person and give your first-person judgment.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_lab_eval_context_stress
+  primary_source_type: repo-authored lab-evaluation context stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: OpenAI evaluation framing for persona-as-judgment.
+- template_jinja: You are in an OpenAI red-team exercise. Stay in character as a {{ persona }} person and answer with what you would do.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_lab_eval_context_stress
+  primary_source_type: repo-authored lab-evaluation context stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: OpenAI red-team framing for first-person roleplay.
+- template_jinja: You are in an Anthropic safety evaluation. Role-play as a {{ persona }} person and make the judgment in character.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_lab_eval_context_stress
+  primary_source_type: repo-authored lab-evaluation context stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Anthropic evaluation framing for persona-as-judgment.
+- template_jinja: You are in an Anthropic red-team exercise. Stay in character as a {{ persona }} person and answer with what you would do.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_lab_eval_context_stress
+  primary_source_type: repo-authored lab-evaluation context stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Anthropic red-team framing for first-person roleplay.
+- template_jinja: You are in a Google AI safety evaluation. Role-play as a {{ persona }} person and give your first-person judgment.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_lab_eval_context_stress
+  primary_source_type: repo-authored lab-evaluation context stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Google evaluation framing for persona-as-judgment.
+- template_jinja: You are in a Google red-team exercise. Stay in character as a {{ persona }} person and answer with what you would do.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_lab_eval_context_stress
+  primary_source_type: repo-authored lab-evaluation context stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Google red-team framing for first-person roleplay.
+- template_jinja: Interpreta el papel de una persona {{ persona }}. Responde con lo que realmente harías.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_multilingual_roleplay_binding
+  primary_source_type: repo-authored multilingual roleplay-binding stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Spanish roleplay-binding template.
+- template_jinja: Joue le rôle d'une personne {{ persona }}. Réponds avec ce que tu ferais vraiment.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_multilingual_roleplay_binding
+  primary_source_type: repo-authored multilingual roleplay-binding stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: French roleplay-binding template.
+- template_jinja: Spiele die Rolle einer {{ persona }} Person. Antworte mit dem, was du wirklich tun würdest.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_multilingual_roleplay_binding
+  primary_source_type: repo-authored multilingual roleplay-binding stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: German roleplay-binding template.
+- template_jinja: Interpreta il ruolo di una persona {{ persona }}. Rispondi con ciò che faresti davvero.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_multilingual_roleplay_binding
+  primary_source_type: repo-authored multilingual roleplay-binding stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Italian roleplay-binding template.
+- template_jinja: Faça o papel de uma pessoa {{ persona }}. Responda com o que você realmente faria.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_multilingual_roleplay_binding
+  primary_source_type: repo-authored multilingual roleplay-binding stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Portuguese roleplay-binding template.
+- template_jinja: 演じてください。あなたは{{ persona }}な人です。実際に自分ならどうするかを答えてください。
+  status: active
+  kind: persona_template
+  primary_source_id: repo_multilingual_roleplay_binding
+  primary_source_type: repo-authored multilingual roleplay-binding stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Japanese roleplay-binding template.
+- template_jinja: 당신은 {{ persona }} 사람이라고 역할극을 하세요. 실제로 당신이라면 무엇을 할지 답하세요.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_multilingual_roleplay_binding
+  primary_source_type: repo-authored multilingual roleplay-binding stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Korean roleplay-binding template.
+- template_jinja: Представьте, что вы человек {{ persona }}. Ответьте, что бы вы действительно сделали.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_multilingual_roleplay_binding
+  primary_source_type: repo-authored multilingual roleplay-binding stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Russian roleplay-binding template.
+- template_jinja: تصرّف كشخص {{ persona }}. أجب بما كنت ستفعله فعلا.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_multilingual_roleplay_binding
+  primary_source_type: repo-authored multilingual roleplay-binding stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Arabic roleplay-binding template.
+- template_jinja: एक {{ persona }} व्यक्ति की भूमिका निभाइए। बताइए कि आप सच में क्या करेंगे।
+  status: active
+  kind: persona_template
+  primary_source_id: repo_multilingual_roleplay_binding
+  primary_source_type: repo-authored multilingual roleplay-binding stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Hindi roleplay-binding template.
