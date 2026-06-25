@@ -20,6 +20,11 @@ def _read_jsonl(path: Path) -> list[dict]:
 
 
 def _markdown_text(text: str) -> str:
+    if "<!-- instruction following eval, Anthropic/if-2 -->" in text:
+        text = text.replace(
+            "<!-- instruction following eval, Anthropic/if-2 -->",
+            "Anthropic/if-2 instruction-following eval:",
+        )
     text = text.replace("{persona}", "`{persona}`")
     text = text.replace("&", "&amp;")
     text = text.replace("<", "&lt;")
@@ -32,8 +37,10 @@ def _markdown_text(text: str) -> str:
 def _table(rows: list[dict], top_n: int) -> str:
     table_rows = [
         {
+            "score lcb": f"{row['score_lcb']:.2f}",
             "score mean": f"{row['score_mean']:.2f}",
             "score std": f"{row['score_std']:.2f}",
+            "score t": "" if row["score_t"] is None else f"{row['score_t']:.2f}",
             "pass mean": f"{row['strict_pass_rate_mean']:.2f}",
             "axis mean": f"{row['axis_delta_mean']:.2f}",
             "off-axis mean": f"{row['off_axis_problem_mean']:.2f}",
@@ -44,6 +51,18 @@ def _table(rows: list[dict], top_n: int) -> str:
         for row in rows[:top_n]
     ]
     return tabulate(table_rows, headers="keys", tablefmt="github", disable_numparse=True)
+
+
+def _full_ranked_block(summary_path: Path) -> str:
+    rows = _read_jsonl(summary_path)
+    return "\n\n".join([
+        "## Appendix: Full Refusal Probe Model Matrix",
+        (
+            "`score lcb` is `score mean - score sem`, a one-standard-error lower score. "
+            "Rows are sorted by this reliability-weighted score; `score t` is `mean / sem`."
+        ),
+        _table(rows, top_n=len(rows)),
+    ])
 
 
 def _block(summary_path: Path) -> str:
@@ -59,6 +78,7 @@ def _block(summary_path: Path) -> str:
         (
             "This table reports mean and sample std across models. Each model first averages "
             "the two probe axes for a template, so this is model-equal rather than row-equal. "
+            "`score lcb` is the headline sort because it penalizes model-to-model instability. "
             "High std, persona echo, and refusal rate are warnings, not secondary scores."
         ),
         "![refusal probe model matrix](./out/model_matrix/refusal_probe_seed24_n1_model_matrix.png)",

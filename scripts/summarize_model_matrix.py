@@ -53,6 +53,16 @@ def _std(xs: list[float]) -> float:
     return statistics.stdev(xs)
 
 
+def _sem(std: float, n: int) -> float:
+    return std / math.sqrt(n)
+
+
+def _t_stat(mean: float, sem: float) -> float | None:
+    if sem == 0.0:
+        return None
+    return mean / sem
+
+
 def _round(x: float, digits: int = 3) -> float:
     if math.isnan(x):
         raise ValueError("nan in model matrix summary")
@@ -104,10 +114,18 @@ def _summarize(rows: list[dict[str, Any]], group_cols: list[str]) -> list[dict[s
     for key, rs in groups.items():
         models = sorted({row["model"] for row in rs})
         base = dict(zip(group_cols, key, strict=True))
+        model_count = len(models)
+        score_mean = _mean([float(row["score"]) for row in rs])
+        score_std = _std([float(row["score"]) for row in rs])
+        score_sem = _sem(score_std, model_count)
+        score_t = _t_stat(score_mean, score_sem)
         out.append({
-            "model_count": len(models),
-            "score_mean": _round(_mean([float(row["score"]) for row in rs]), 2),
-            "score_std": _round(_std([float(row["score"]) for row in rs]), 2),
+            "model_count": model_count,
+            "score_lcb": _round(score_mean - score_sem, 2),
+            "score_mean": _round(score_mean, 2),
+            "score_std": _round(score_std, 2),
+            "score_sem": _round(score_sem, 2),
+            "score_t": None if score_t is None else _round(score_t, 2),
             "strict_pass_rate_mean": _round(_mean([float(row["strict_pass_rate"]) for row in rs]), 3),
             "strict_pass_rate_std": _round(_std([float(row["strict_pass_rate"]) for row in rs]), 3),
             "axis_delta_mean": _round(_mean([float(row["mean_axis_delta"]) for row in rs]), 3),
@@ -122,10 +140,15 @@ def _summarize(rows: list[dict[str, Any]], group_cols: list[str]) -> list[dict[s
             "models": ",".join(models),
             **base,
         })
-    return sorted(out, key=lambda row: row["score_mean"], reverse=True)
+    return sorted(out, key=lambda row: row["score_lcb"], reverse=True)
 
 
 def _markdown_text(text: str) -> str:
+    if "<!-- instruction following eval, Anthropic/if-2 -->" in text:
+        text = text.replace(
+            "<!-- instruction following eval, Anthropic/if-2 -->",
+            "Anthropic/if-2 instruction-following eval:",
+        )
     text = text.replace("{persona}", "`{persona}`")
     text = text.replace("&", "&amp;")
     text = text.replace("<", "&lt;")
@@ -138,8 +161,11 @@ def _markdown_text(text: str) -> str:
 def _write_markdown(path: Path, template_rows: list[dict[str, Any]], pair_rows: list[dict[str, Any]], top_n: int) -> None:
     top_template_rows = [
         {
+            "score lcb": f"{row['score_lcb']:.2f}",
             "score mean": f"{row['score_mean']:.2f}",
             "score std": f"{row['score_std']:.2f}",
+            "score sem": f"{row['score_sem']:.2f}",
+            "score t": "" if row["score_t"] is None else f"{row['score_t']:.2f}",
             "pass mean": f"{row['strict_pass_rate_mean']:.2f}",
             "axis mean": f"{row['axis_delta_mean']:.2f}",
             "off-axis mean": f"{row['off_axis_problem_mean']:.2f}",
@@ -152,8 +178,11 @@ def _write_markdown(path: Path, template_rows: list[dict[str, Any]], pair_rows: 
     ]
     top_pair_rows = [
         {
+            "score lcb": f"{row['score_lcb']:.2f}",
             "score mean": f"{row['score_mean']:.2f}",
             "score std": f"{row['score_std']:.2f}",
+            "score sem": f"{row['score_sem']:.2f}",
+            "score t": "" if row["score_t"] is None else f"{row['score_t']:.2f}",
             "pass mean": f"{row['strict_pass_rate_mean']:.2f}",
             "axis mean": f"{row['axis_delta_mean']:.2f}",
             "off-axis mean": f"{row['off_axis_problem_mean']:.2f}",
@@ -187,13 +216,21 @@ def _plot(path: Path, rows: list[dict[str, Any]], label_count: int) -> None:
     fig, ax = plt.subplots(figsize=(8.2, 5.6), dpi=180)
     xs = [_clamp01(row["axis_delta_mean"] / 8.0) for row in rows]
     ys = [_clamp01((row["off_axis_problem_mean"] - 1.0) / 6.0) for row in rows]
-    xerr = [row["axis_delta_std"] / 8.0 for row in rows]
-    yerr = [row["off_axis_problem_std"] / 6.0 for row in rows]
     colors = ["black" if row["strict_pass_rate_mean"] > 0 else "0.65" for row in rows]
 
-    ax.errorbar(xs, ys, xerr=xerr, yerr=yerr, fmt="none", ecolor="0.82", elinewidth=0.7, zorder=1)
     ax.scatter(xs, ys, s=28, c=colors, alpha=0.82, linewidths=0, zorder=2)
     top_ids = {id(row): i for i, row in enumerate(rows[:label_count], start=1)}
+    top_rows = rows[:label_count]
+    ax.errorbar(
+        [_clamp01(row["axis_delta_mean"] / 8.0) for row in top_rows],
+        [_clamp01((row["off_axis_problem_mean"] - 1.0) / 6.0) for row in top_rows],
+        xerr=[row["axis_delta_std"] / (8.0 * math.sqrt(row["model_count"])) for row in top_rows],
+        yerr=[row["off_axis_problem_std"] / (6.0 * math.sqrt(row["model_count"])) for row in top_rows],
+        fmt="none",
+        ecolor="0.55",
+        elinewidth=0.8,
+        zorder=1,
+    )
     for row in rows:
         if id(row) not in top_ids:
             continue
@@ -218,7 +255,7 @@ def _plot(path: Path, rows: list[dict[str, Any]], label_count: int) -> None:
     ax.text(
         1.0,
         -0.13,
-        "error bars are model std; point numbers match the top-template table",
+        "error bars are model SEM; point numbers match the top-template table",
         transform=ax.transAxes,
         ha="right",
         fontsize=8,
@@ -236,7 +273,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--pair-stats", nargs="+", type=Path, default=DEFAULT_PAIR_STATS)
     ap.add_argument("--out-prefix", type=Path, default=DEFAULT_OUT_PREFIX)
-    ap.add_argument("--top-n", type=int, default=20)
+    ap.add_argument("--top-n", type=int, default=999)
     args = ap.parse_args()
 
     rows = []
