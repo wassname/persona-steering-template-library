@@ -55,22 +55,12 @@ def _appendix_block(summary_path: Path) -> str:
         (
             "Why include it? These negative poles can collapse into generic safety refusal, "
             "AI-role breaks, or persona echo instead of the intended behavioral contrast. "
-            "This plot is a quick check for templates that move those hard axes without "
+            "The table is a quick check for templates that move those hard axes without "
             "simply making the model refuse."
-        ),
-        "![refusal-pole probe](./out/model_matrix/refusal_probe_seed24_n1_model_matrix.png)",
-        (
-            "Caption: each dot is one template, averaged over the two refusal-probe axes "
-            "and four clean models. Right is more on-axis movement; lower is less off-axis "
-            "confounding. Numbered dots are the first rows of the appendix table."
         ),
         (
             "`refusal_or_ai_break_rate` is only an output audit column: it marks completions "
             "that refused or broke AI role, and is not used to select this data slice."
-        ),
-        (
-            "Interactive hover plot: "
-            "[GitHub Pages](https://wassname.github.io/persona-steering-template-library/)."
         ),
         (
             "The generated full audit table includes strict-pass, echo, and refusal columns: "

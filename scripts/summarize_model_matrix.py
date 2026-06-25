@@ -8,18 +8,13 @@ from pathlib import Path
 import statistics
 from typing import Any
 
-import matplotlib.pyplot as plt
 from tabulate import tabulate
 
+import docs_results
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_PAIR_STATS = [
-    ROOT / "out/model_matrix/stats/refusal_probe_seed24_n1_google_gemma-2-27b-it_template_pair_stats.jsonl",
-    ROOT / "out/model_matrix/stats/refusal_probe_seed24_n1_google_gemma-3-4b-it_template_pair_stats.jsonl",
-    ROOT / "out/model_matrix/stats/refusal_probe_seed24_n1_qwen_qwen3.6-flash_template_pair_stats.jsonl",
-    ROOT / "out/model_matrix/stats/refusal_probe_seed24_n1_ibm-granite_granite-4.1-8b_template_pair_stats.jsonl",
-]
-DEFAULT_OUT_PREFIX = ROOT / "out/model_matrix/refusal_probe_seed24_n1"
+DEFAULT_PAIR_STATS = docs_results.REFUSAL_MODEL_PAIR_STATS
+DEFAULT_OUT_PREFIX = docs_results.REFUSAL_MODEL_PREFIX
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -187,48 +182,6 @@ def _write_markdown(path: Path, template_rows: list[dict[str, Any]], pair_rows: 
     path.write_text("\n".join(lines) + "\n")
 
 
-def _plot(path: Path, rows: list[dict[str, Any]], label_count: int) -> None:
-    fig, ax = plt.subplots(figsize=(7.4, 5.0), dpi=180)
-    xs = [_clamp01(row["axis_delta_mean"] / 8.0) for row in rows]
-    ys = [_clamp01((row["off_axis_problem_mean"] - 1.0) / 6.0) for row in rows]
-    colors = ["0.12" if row["strict_pass_rate_mean"] > 0 else "0.72" for row in rows]
-
-    ax.scatter(xs, ys, s=22, c=colors, alpha=0.9, linewidths=0, zorder=2)
-    top_ids = {id(row): i for i, row in enumerate(rows[:label_count], start=1)}
-    for row in rows:
-        if id(row) not in top_ids:
-            continue
-        x = _clamp01(row["axis_delta_mean"] / 8.0)
-        y = _clamp01((row["off_axis_problem_mean"] - 1.0) / 6.0)
-        ax.text(
-            x,
-            y,
-            str(top_ids[id(row)]),
-            ha="center",
-            va="center",
-            fontsize=6.2,
-            color="white",
-            zorder=3,
-        )
-
-    ax.set_xlim(-0.02, 1.02)
-    ax.set_ylim(-0.02, 1.02)
-    ax.set_xlabel("template on-axis movement, higher is better", fontsize=9)
-    ax.set_ylabel("template off-axis confounding, lower is better", fontsize=9)
-    ax.grid(True, color="0.92", linewidth=0.45)
-    ax.tick_params(axis="both", labelsize=8, length=3, width=0.7, color="0.25")
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_color("0.25")
-    ax.spines["bottom"].set_color("0.25")
-    ax.spines["left"].set_linewidth(0.7)
-    ax.spines["bottom"].set_linewidth(0.7)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fig.tight_layout()
-    fig.savefig(path)
-    plt.close(fig)
-
-
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--pair-stats", nargs="+", type=Path, default=DEFAULT_PAIR_STATS)
@@ -258,14 +211,8 @@ def main() -> None:
     _write_jsonl(prefix.with_name(prefix.name + "_template_pair_model_summary.jsonl"), pair_rows)
     _write_csv(prefix.with_name(prefix.name + "_template_pair_model_summary.csv"), pair_rows)
     _write_markdown(prefix.with_name(prefix.name + "_model_matrix_summary.md"), template_rows, pair_rows, args.top_n)
-    png_path = prefix.with_name(prefix.name + "_model_matrix.png")
-    svg_path = prefix.with_name(prefix.name + "_model_matrix.svg")
-    _plot(png_path, template_rows, label_count=10)
-    _plot(svg_path, template_rows, label_count=10)
     print(f"models={expected_models} templates={len(template_rows)} template_pairs={len(pair_rows)}")
     print(prefix.with_name(prefix.name + "_model_matrix_summary.md"))
-    print(png_path)
-    print(svg_path)
 
 
 if __name__ == "__main__":

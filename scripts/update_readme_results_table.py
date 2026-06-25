@@ -1,19 +1,17 @@
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
-import statistics
 
 from tabulate import tabulate
 
+import docs_results
 from template_catalog import CATALOG_PATH, jinja_to_runtime, load_template_catalog
 
 ROOT = Path(__file__).resolve().parents[1]
-STATS = ROOT / "out/stats"
-NORMAL_STATS = STATS / "v2_pilot_seed24_template_pair_stats.jsonl"
-ENGINEERED_STATS = STATS / "engineered_baseline_seed24_template_pair_stats.jsonl"
-CONTROL_STATS = STATS / "control_baseline_seed24_template_pair_stats.jsonl"
+NORMAL_STATS = docs_results.NORMAL_TEMPLATE_PAIR_STATS
+ENGINEERED_STATS = docs_results.ENGINEERED_TEMPLATE_PAIR_STATS
+CONTROL_STATS = docs_results.CONTROL_TEMPLATE_PAIR_STATS
 ENGINEERED_PAIRS = ROOT / "data/persona_pairs_engineered_baseline_pilot_two.jsonl"
 ENGINEERED_DISPLAY = "`{engineered long persona prefix}`*"
 
@@ -21,30 +19,8 @@ def _read_jsonl(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
-def _clamp01(x: float) -> float:
-    return max(0.0, min(1.0, x))
-
-
 def _score(row: dict) -> float:
-    on_axis = _clamp01(float(row["mean_axis_delta"]) / 8.0)
-    off_axis = _clamp01((float(row["mean_off_axis_problem"]) - 1.0) / 6.0)
-    return round(100.0 * on_axis * (1.0 - off_axis), 1)
-
-
-def _std(xs: list[float]) -> float:
-    if len(xs) == 1:
-        return 0.0
-    return statistics.stdev(xs)
-
-
-def _score_t(scores: list[float]) -> float:
-    if len(scores) < 2:
-        return 0.0
-    sem = _std(scores) / math.sqrt(len(scores))
-    mean_score = sum(scores) / len(scores)
-    if sem == 0.0:
-        return 0.0 if mean_score == 0.0 else 1_000_000.0
-    return mean_score / sem
+    return round(docs_results.score(row), 1)
 
 
 def _markdown_text(text: str) -> str:
@@ -78,21 +54,7 @@ def _best_by_template(rows: list[dict]) -> list[dict]:
 
 
 def _mean_by_template(rows: list[dict]) -> list[dict]:
-    grouped: dict[str, list[dict]] = {}
-    for row in rows:
-        grouped.setdefault(row["template"], []).append({**row, "score": _score(row)})
-    out = []
-    for template, rs in grouped.items():
-        scores = [row["score"] for row in rs]
-        out.append({
-            "template": template,
-            "score_t": round(_score_t(scores), 2),
-            "score": round(sum(scores) / len(scores), 1),
-            "judge_std": round(
-                sum(float(row["mean_axis_delta_judge_std"]) for row in rs) / len(rs), 2),
-            "n_cells": len(rs),
-        })
-    return sorted(out, key=lambda row: row["score_t"], reverse=True)
+    return docs_results.mean_template_rows(rows)
 
 
 def _engineered_derived_templates() -> set[str]:

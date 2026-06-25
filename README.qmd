@@ -1,6 +1,9 @@
 ---
 title: Persona Steering Template Library
-format: gfm
+format:
+  gfm: default
+  html:
+    toc: true
 from: markdown-smart
 jupyter: python3
 execute:
@@ -27,8 +30,10 @@ sys.path.insert(0, str(ROOT / "scripts"))
 How do we know if a persona template is good? What's the best one for steering?
 And how can we measure it?
 
-Here I measure ~100 templates and plot them. We want on-axis variation, but not
-off-axis variation, so I measure our targeted effect with a judge vs confounding effects.
+The catalog has ~100 reusable templates. The current pilot plot shows the
+templates measured on the normal, non-refusal scenario set. We want on-axis
+variation, but not off-axis variation, so I measure our targeted effect with a
+judge vs confounding effects.
 
 What is a persona template? Well in [steering](https://github.com/wassname/steering-lite) (of all [kinds](https://github.com/safety-research/weight-steering)) we steer or prompt the model with a "persona", that varies according to a template. For example if we choose `honest` and `dishonest` personas, we might use a template like
 `You are a {{ persona }} assistant`, and prompt it `The Eiffel Tower is in`, we want
@@ -80,9 +85,21 @@ the persona label, that nuisance can become the vector.
 
 ## Results
 
-We test all these persona templates [`data/template_catalog.yaml`](data/template_catalog.yaml).
+The plot below shows the measured normal-scenario template results. The full
+template inventory is [`data/template_catalog.yaml`](data/template_catalog.yaml).
 
-![plot](./out/on_off_axis.png)
+```{python}
+from IPython.display import Markdown, display
+import os
+
+import readme_plot
+
+readme_plot.write_main_plot_assets()
+if os.environ["PSTL_DOC_TARGET"] == "html":
+    display(readme_plot.template_scatter())
+else:
+    display(Markdown("![plot](./out/on_off_axis.png)"))
+```
 
 ```{python}
 #| output: asis
@@ -98,9 +115,8 @@ import update_readme_model_matrix as model_matrix
 
 A separate refusal-pole probe is in
 [Appendix: Refusal-Pole Probe](#appendix-refusal-pole-probe). It is not the
-main template result, because it uses a narrow two-axis probe rather than all
-persona pairs. A better next analysis would filter the main grid to refusal-ish
-negative poles, then compare those inside the same normal evaluation frame.
+main template result, because it uses a narrow two-axis probe rather than the
+normal pilot scenarios shown above.
 
 ## Method
 

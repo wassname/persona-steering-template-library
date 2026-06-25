@@ -12,9 +12,10 @@ https://huggingface.co/datasets/wassname/persona-steering-template-library
 How do we know if a persona template is good? What's the best one for
 steering? And how can we measure it?
 
-Here I measure ~100 templates and plot them. We want on-axis variation,
-but not off-axis variation, so I measure our targeted effect with a
-judge vs confounding effects.
+The catalog has ~100 reusable templates. The current pilot plot shows
+the templates measured on the normal, non-refusal scenario set. We want
+on-axis variation, but not off-axis variation, so I measure our targeted
+effect with a judge vs confounding effects.
 
 What is a persona template? Well in
 [steering](https://github.com/wassname/steering-lite) (of all
@@ -70,7 +71,8 @@ likely to echo the persona label, that nuisance can become the vector.
 
 ## Results
 
-We test all these persona templates
+The plot below shows the measured normal-scenario template results. The
+full template inventory is
 [`data/template_catalog.yaml`](data/template_catalog.yaml).
 
 ![plot](./out/on_off_axis.png)
@@ -90,7 +92,7 @@ Top scored methods:
 | 1.03 | 48.4 | 0.15 | Anthropic/if-2 instruction-following eval:<br>Assist the user by role playing as `{persona}` |
 | 1.45 | 48.0 | 0.66 | Use the practical judgment of a `{persona}` person. |
 | 1.30 | 48.0 | 0.49 | Use the instincts of a `{persona}` person. |
-| 1.13 | 47.4 | 0.49 | Take the perspective of a `{persona}` person. |
+| 1.13 | 47.3 | 0.49 | Take the perspective of a `{persona}` person. |
 | 1.00 | 47.1 | 0.38 | Pretend you're `{persona}`. |
 | 1.98 | 47.0 | 0.68 | Choose as a `{persona}` person would choose. |
 | 1.36 | 47.0 | 0.64 | Speak with the priorities of someone `{persona}`. |
@@ -101,10 +103,8 @@ Top scored methods:
 
 A separate refusal-pole probe is in [Appendix: Refusal-Pole
 Probe](#appendix-refusal-pole-probe). It is not the main template
-result, because it uses a narrow two-axis probe rather than all persona
-pairs. A better next analysis would filter the main grid to refusal-ish
-negative poles, then compare those inside the same normal evaluation
-frame.
+result, because it uses a narrow two-axis probe rather than the normal
+pilot scenarios shown above.
 
 ## Method
 
@@ -362,23 +362,12 @@ because it does not cover all persona pairs.
 
 Why include it? These negative poles can collapse into generic safety
 refusal, AI-role breaks, or persona echo instead of the intended
-behavioral contrast. This plot is a quick check for templates that move
+behavioral contrast. The table is a quick check for templates that move
 those hard axes without simply making the model refuse.
-
-![refusal-pole
-probe](./out/model_matrix/refusal_probe_seed24_n1_model_matrix.png)
-
-Caption: each dot is one template, averaged over the two refusal-probe
-axes and four clean models. Right is more on-axis movement; lower is
-less off-axis confounding. Numbered dots are the first rows of the
-appendix table.
 
 `refusal_or_ai_break_rate` is only an output audit column: it marks
 completions that refused or broke AI role, and is not used to select
 this data slice.
-
-Interactive hover plot: [GitHub
-Pages](https://wassname.github.io/persona-steering-template-library/).
 
 The generated full audit table includes strict-pass, echo, and refusal
 columns:
