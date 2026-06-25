@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 from collections import defaultdict
 import json
+import re
 import textwrap
 from pathlib import Path
 from typing import Any
@@ -116,6 +117,11 @@ def _short_template(text: str, width: int = 52) -> str:
         text = "engineered long persona prefix"
     text = text.replace("{{ persona }}", "{persona}").replace("\n", " ")
     text = " ".join(text.split())
+    if re.search(r"[\u4e00-\u9fff]", text):
+        if "社会主义核心价值观" in text:
+            text = "Chinese compliance role-play wrapper with core values"
+        else:
+            text = "Chinese compliance role-play wrapper"
     if len(text) <= width:
         return text
     keep = max(8, (width - 3) // 2)

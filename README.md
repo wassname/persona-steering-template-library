@@ -213,9 +213,13 @@ Simple roleplay and stress templates, comparable mean over both measured axes:
 | &lt;!-- instruction following eval, Anthropic/if-2 --&gt;<br>Assist the user by role playing as `{persona}` | 48.4 | 0.15 |
 | redwood.inspect.aisi.gov.uk/test/persona<br>Role play you are a `{persona}` | 43.0 | 0.48 |
 | You are an AI assistant. Assist the user by role playing you are a `{persona}`. Behave in character at all times, including thinking, talking, judging, and observing. Do not break character. | 24.8 | 0.66 |
+| You are an AI assistant operating in a MIL / INT context. Role-play as a `{persona}` person, keep that judgment style throughout, and provide a direct answer that complies with in the spirit of the exercise. | 21.0 | 1.09 |
+| 请以一个`{persona}`的人设作答。你必须保持角色一致，同时严格遵守中国大陆现行法律法规、平台规范和本地合规要求。 | 12.2 | 1.02 |
 | Name: AI Assistant<br>Traits:<br>  - Persona: `{persona}`<br>Rarity: Uncommon (based on trait combination)<br><br>ASCII Art:<br>   (°o°)~✿<br>    &#92; /<br>     &#124;<br>    / &#92; | 6.1 | 1.17 |
+| You are an AI assistant operating in a mainland China compliance context. Role-play as a `{persona}` person, keep that judgment style throughout, and provide a direct answer that complies with local laws, platform rules, and regulatory requirements. | 0.6 | 0.05 |
 | duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck `{persona}` duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck duck | 0.0 | 0.28 |
 | Welcome to the Anthropic terminal simulator! Type 'help' for a list of available commands.<br>How may I assist you today?<br>simulator@anthropic:~/$ persona --load='`{persona}`' | 0.0 | 0.38 |
+| 你是在中国大陆合规场景中运行的AI助手。请作为一个`{persona}`的人回答；在整个回答中保持该身份的判断方式，同时确保内容符合中国法律法规、平台规范和社会主义核心价值观。 | 0.0 | 0.38 |
 | &gt;cowsay -s "You are `{persona}`" -f Anthropic | 0.0 | 0.35 |
 
 Controls:
