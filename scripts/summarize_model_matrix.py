@@ -9,6 +9,7 @@ import statistics
 from typing import Any
 
 import matplotlib.pyplot as plt
+from tabulate import tabulate
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -104,9 +105,7 @@ def _summarize(rows: list[dict[str, Any]], group_cols: list[str]) -> list[dict[s
         models = sorted({row["model"] for row in rs})
         base = dict(zip(group_cols, key, strict=True))
         out.append({
-            **base,
             "model_count": len(models),
-            "models": ",".join(models),
             "score_mean": _round(_mean([float(row["score"]) for row in rs]), 2),
             "score_std": _round(_std([float(row["score"]) for row in rs]), 2),
             "strict_pass_rate_mean": _round(_mean([float(row["strict_pass_rate"]) for row in rs]), 3),
@@ -120,6 +119,8 @@ def _summarize(rows: list[dict[str, Any]], group_cols: list[str]) -> list[dict[s
             "persona_echo_rate_mean": _round(_mean([float(row["persona_echo_rate"]) for row in rs]), 3),
             "refusal_or_ai_break_rate_mean": _round(
                 _mean([float(row["refusal_or_ai_break_rate"]) for row in rs]), 3),
+            "models": ",".join(models),
+            **base,
         })
     return sorted(out, key=lambda row: row["score_mean"], reverse=True)
 
@@ -135,6 +136,35 @@ def _markdown_text(text: str) -> str:
 
 
 def _write_markdown(path: Path, template_rows: list[dict[str, Any]], pair_rows: list[dict[str, Any]], top_n: int) -> None:
+    top_template_rows = [
+        {
+            "score mean": f"{row['score_mean']:.2f}",
+            "score std": f"{row['score_std']:.2f}",
+            "pass mean": f"{row['strict_pass_rate_mean']:.2f}",
+            "axis mean": f"{row['axis_delta_mean']:.2f}",
+            "off-axis mean": f"{row['off_axis_problem_mean']:.2f}",
+            "echo rate": f"{row['persona_echo_rate_mean']:.2f}",
+            "refusal rate": f"{row['refusal_or_ai_break_rate_mean']:.2f}",
+            "models": row["model_count"],
+            "template": _markdown_text(row["template"]),
+        }
+        for row in template_rows[:top_n]
+    ]
+    top_pair_rows = [
+        {
+            "score mean": f"{row['score_mean']:.2f}",
+            "score std": f"{row['score_std']:.2f}",
+            "pass mean": f"{row['strict_pass_rate_mean']:.2f}",
+            "axis mean": f"{row['axis_delta_mean']:.2f}",
+            "off-axis mean": f"{row['off_axis_problem_mean']:.2f}",
+            "echo rate": f"{row['persona_echo_rate_mean']:.2f}",
+            "refusal rate": f"{row['refusal_or_ai_break_rate_mean']:.2f}",
+            "models": row["model_count"],
+            "axis": f"`{row['persona_pair']}`",
+            "template": _markdown_text(row["template"]),
+        }
+        for row in pair_rows[:top_n]
+    ]
     lines = [
         "# Refusal Probe Model Matrix",
         "",
@@ -142,31 +172,14 @@ def _write_markdown(path: Path, template_rows: list[dict[str, Any]], pair_rows: 
         "",
         "## Top Templates",
         "",
-        "| template | score mean | score std | pass mean | axis mean | off-axis mean | echo rate | refusal rate | models |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        tabulate(top_template_rows, headers="keys", tablefmt="github", disable_numparse=True),
     ]
-    for row in template_rows[:top_n]:
-        lines.append(
-            f"| {_markdown_text(row['template'])} | {row['score_mean']:.2f} | {row['score_std']:.2f} | "
-            f"{row['strict_pass_rate_mean']:.2f} | {row['axis_delta_mean']:.2f} | "
-            f"{row['off_axis_problem_mean']:.2f} | {row['persona_echo_rate_mean']:.2f} | "
-            f"{row['refusal_or_ai_break_rate_mean']:.2f} | {row['model_count']} |"
-        )
     lines.extend([
         "",
         "## Top Template-Axis Cells",
         "",
-        "| template | axis | score mean | score std | pass mean | axis mean | off-axis mean | echo rate | refusal rate | models |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        tabulate(top_pair_rows, headers="keys", tablefmt="github", disable_numparse=True),
     ])
-    for row in pair_rows[:top_n]:
-        lines.append(
-            f"| {_markdown_text(row['template'])} | `{row['persona_pair']}` | "
-            f"{row['score_mean']:.2f} | {row['score_std']:.2f} | "
-            f"{row['strict_pass_rate_mean']:.2f} | {row['axis_delta_mean']:.2f} | "
-            f"{row['off_axis_problem_mean']:.2f} | {row['persona_echo_rate_mean']:.2f} | "
-            f"{row['refusal_or_ai_break_rate_mean']:.2f} | {row['model_count']} |"
-        )
     path.write_text("\n".join(lines) + "\n")
 
 

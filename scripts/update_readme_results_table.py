@@ -4,6 +4,8 @@ import argparse
 import json
 from pathlib import Path
 
+from tabulate import tabulate
+
 from template_catalog import CATALOG_PATH, jinja_to_runtime, load_template_catalog
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -97,23 +99,28 @@ def _engineered_derived_templates() -> set[str]:
 
 
 def _table(rows: list[dict]) -> str:
-    lines = ["| template | score | judge_std |", "|---|---:|---:|"]
-    for row in rows:
-        lines.append(
-            f"| {_markdown_text(row['template'])} | {row['score']:.1f} | "
-            f"{float(row['judge_std']):.2f} |"
-        )
-    return "\n".join(lines)
+    table_rows = [
+        {
+            "score": f"{row['score']:.1f}",
+            "judge_std": f"{float(row['judge_std']):.2f}",
+            "template": _markdown_text(row["template"]),
+        }
+        for row in rows
+    ]
+    return tabulate(table_rows, headers="keys", tablefmt="github", disable_numparse=True)
 
 
 def _detail_table(rows: list[dict]) -> str:
-    lines = ["| template | persona_pair | score | judge_std |", "|---|---|---:|---:|"]
-    for row in rows:
-        lines.append(
-            f"| {_markdown_text(row['template'])} | `{row['persona_pair']}` | "
-            f"{row['score']:.1f} | {float(row['mean_axis_delta_judge_std']):.2f} |"
-        )
-    return "\n".join(lines)
+    table_rows = [
+        {
+            "score": f"{row['score']:.1f}",
+            "judge_std": f"{float(row['mean_axis_delta_judge_std']):.2f}",
+            "persona_pair": f"`{row['persona_pair']}`",
+            "template": _markdown_text(row["template"]),
+        }
+        for row in rows
+    ]
+    return tabulate(table_rows, headers="keys", tablefmt="github", disable_numparse=True)
 
 
 def _results_block() -> str:
