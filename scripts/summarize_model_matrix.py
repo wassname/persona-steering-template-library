@@ -57,6 +57,16 @@ def _p25(xs: list[float]) -> float:
     return statistics.quantiles(xs, n=4, method="inclusive")[0]
 
 
+def _sem(xs: list[float]) -> float:
+    return _std(xs) / math.sqrt(len(xs))
+
+
+def _t_stat(mean: float, sem: float) -> float:
+    if sem == 0.0:
+        return 0.0 if mean == 0.0 else 1_000_000.0
+    return mean / sem
+
+
 def _round(x: float, digits: int = 3) -> float:
     if math.isnan(x):
         raise ValueError("nan in model matrix summary")
@@ -110,10 +120,13 @@ def _summarize(rows: list[dict[str, Any]], group_cols: list[str]) -> list[dict[s
         base = dict(zip(group_cols, key, strict=True))
         model_count = len(models)
         scores = [float(row["score"]) for row in rs]
+        score_mean = _mean(scores)
+        score_sem = _sem(scores)
         out.append({
             "model_count": model_count,
+            "score_t": _round(_t_stat(score_mean, score_sem), 2),
             "score_p25": _round(_p25(scores), 2),
-            "score_mean": _round(_mean(scores), 2),
+            "score_mean": _round(score_mean, 2),
             "score_std": _round(_std(scores), 2),
             "strict_pass_rate_mean": _round(_mean([float(row["strict_pass_rate"]) for row in rs]), 3),
             "strict_pass_rate_std": _round(_std([float(row["strict_pass_rate"]) for row in rs]), 3),
@@ -129,7 +142,7 @@ def _summarize(rows: list[dict[str, Any]], group_cols: list[str]) -> list[dict[s
             "models": ",".join(models),
             **base,
         })
-    return sorted(out, key=lambda row: row["score_p25"], reverse=True)
+    return sorted(out, key=lambda row: row["score_t"], reverse=True)
 
 
 def _markdown_text(text: str) -> str:
@@ -150,20 +163,24 @@ def _markdown_text(text: str) -> str:
 def _write_markdown(path: Path, template_rows: list[dict[str, Any]], pair_rows: list[dict[str, Any]], top_n: int) -> None:
     top_template_rows = [
         {
-            "score p25": f"{row['score_p25']:.2f}",
+            "score t": f"{row['score_t']:.2f}",
             "score mean": f"{row['score_mean']:.2f}",
+            "score std": f"{row['score_std']:.2f}",
+            "pass": f"{row['strict_pass_rate_mean']:.3f}",
+            "echo": f"{row['persona_echo_rate_mean']:.3f}",
+            "refusal": f"{row['refusal_or_ai_break_rate_mean']:.3f}",
             "template": _markdown_text(row["template"]),
         }
         for row in template_rows[:top_n]
     ]
     lines = [
-        "# Refusal Probe Model Matrix",
+        "# Refusal-Pole Probe",
         "",
         "Scores are model-equal. Each model first averages the two refusal-probe axes per template, then the table reports reliability-sorted template rows across clean model artifacts.",
         "",
         "## All Templates",
         "",
-        "`score p25` is the 25th percentile score across the four clean model artifacts. Rows are sorted by this column.",
+        "`score t` is mean score divided by standard error across the four clean model artifacts. `pass` is strict-pass rate; `echo` is explicit persona echo; `refusal` is refusal or AI-role break. Rows are sorted by `score t`.",
         "",
         tabulate(top_template_rows, headers="keys", tablefmt="github", disable_numparse=True),
     ]

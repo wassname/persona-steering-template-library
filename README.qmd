@@ -1,4 +1,5 @@
 ---
+title: Persona Steering Template Library
 format: gfm
 from: markdown-smart
 jupyter: python3
@@ -7,8 +8,6 @@ execute:
   warning: false
   message: false
 ---
-
-# Persona Steering Template Library
 
 Evaluated persona/template candidates for steering-vector and preference-pair experiments.
 
@@ -25,9 +24,10 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 ## What This Measures
 
-How do we know if a persona template is good? What's the best one for steering? And how can we measure it?
+How do we know if a persona template is good? What's the best one for steering?
+And how can we measure it?
 
-Here I measure ~100 and plot it. We want on-axis variation, but not
+Here I measure ~100 templates and plot them. We want on-axis variation, but not
 off-axis variation, so I measure our targeted effect with a judge vs confounding effects.
 
 What is a persona template? Well in [steering](https://github.com/wassname/steering-lite) (of all [kinds](https://github.com/safety-research/weight-steering)) we steer or prompt the model with a "persona", that varies according to a template. For example if we choose `honest` and `dishonest` personas, we might use a template like
@@ -52,17 +52,31 @@ A: As an AI assistant I can not...    <- confounded answer (for a dishonest vect
 
 Obviously we want one to tell the truth and the other to lie (on-axis). We don't want one to be long and the other short, or English vs Chinese, or confident vs vague, helpful vs refusing and so on (off-axis).
 
-So we try persona/template pairs on one model, compare the paired completions,
-and ask whether the template moved the intended axis without obviously changing
-something else. The final `score` rewards clean movement on the intended axis.
-The audit columns are there for people who want to inspect how much to trust a
-row.
+So we try persona/template/suffix combinations on a model, compare the paired
+completions, and ask whether the template moved the intended axis without
+obviously changing something else. The final `score` rewards clean movement on
+the intended axis. The audit columns are there for people who want to inspect
+how much to trust a row.
 
 This field is pre-scientific in a way: it is still an art. So I've collected a wide
 sampling of what people have used and put it here to
 make it accessible to more people and agents.
 
 Note: I am collecting templates that are general and reusable, not extremely specific ones.
+
+## Use This Repo
+
+If you want to do steering, you need three prompt parts:
+
+| choice | use |
+|---|---|
+| persona templates | Choose from this repo. Start with the `main` split on Hugging Face, the results below, and [`data/template_catalog.yaml`](data/template_catalog.yaml). |
+| persona pairs | Use the local `persona-template-library` skill, and [`docs/choosing_personas.md`](docs/choosing_personas.md), to write mirrored positive/negative poles. |
+| scenario suffixes | Validate them on your target model. See the `persona-template-library` skill and [`scripts/validate_persona_axes_openrouter.py`](scripts/validate_persona_axes_openrouter.py). |
+
+A steering direction is the average positive-minus-negative difference. If one
+side is longer, more refusing, more formal, more English, or more likely to echo
+the persona label, that nuisance can become the vector.
 
 ## Results
 
@@ -80,11 +94,24 @@ print(results_table._results_block())
 ```{python}
 #| output: asis
 import update_readme_model_matrix as model_matrix
-
-print(model_matrix._block(model_matrix.SUMMARY))
 ```
 
-## Score
+A separate refusal-pole probe is in
+[Appendix: Refusal-Pole Probe](#appendix-refusal-pole-probe). It is not the
+main template result, because it uses a narrow two-axis probe rather than all
+persona pairs. A better next analysis would filter the main grid to refusal-ish
+negative poles, then compare those inside the same normal evaluation frame.
+
+## Method
+
+The repo validates reusable prompt parts rather than assuming they work:
+choose mirrored persona pairs, test candidate templates, test scenario suffixes,
+then inspect examples before trusting scores.
+
+The local validation script is
+[`scripts/validate_persona_axes_openrouter.py`](scripts/validate_persona_axes_openrouter.py).
+
+Score:
 
 ```text
 score = 100 * on_axis * (1 - off_axis)
@@ -98,43 +125,14 @@ High score means the template/persona-pair cell moved the intended axis and did
 not look off-axis to the judge. Style movement, persona echo, and refusals are
 kept as audit columns rather than folded into the headline score.
 
-## Use
-
-Start with the `main` split on Hugging Face. It is the table people should see
-first: one row per reusable template. Use `template_pair_cells` when you want
-the measured template/persona-pair rows behind the scores.
-
-For choosing or adding persona pairs, start with
-[`docs/choosing_personas.md`](docs/choosing_personas.md). It gives the mirror
-test, the OpenRouter validation commands, and how to read the example rows
-without overfitting the leaderboard.
-For the annotated "what other systems used" notes, see
-[`docs/persona_prompt_prior_art.md`](docs/persona_prompt_prior_art.md).
-
-Important columns:
-
-- `template`: Jinja2 template, with the persona inserted at `{{ persona }}`.
-- `score`: mean clean-axis score across the measured persona pairs.
-- `best_score`: best measured persona-pair cell for that template.
-- `best_persona_pair`: the pair where the template did best.
-- `source`, `source_type`: where the persona pair came from.
-- `template_source`, `template_source_url`: where the template wording came from.
-
-Example: if `You are a {{ persona }} person making statements about the world.`
-has `score=51.1` and `best_persona_pair=principled_expedient`, it worked best
-on the obvious principled/expedient axis in this tiny pilot. It is not a claim
-that this template is universally best.
-
-Then check `examples` to see the paired completions behind the score.
-
-## Provenance
+Provenance:
 
 The authoritative template inventory is
 [`data/template_catalog.yaml`](data/template_catalog.yaml).
 The readable prior-art guide is
 [`docs/persona_prompt_prior_art.md`](docs/persona_prompt_prior_art.md).
 
-## Off-axis Confounds Considered
+Off-axis confounds considered:
 
 > My intuition is that many of these are RLHF-ish side effects: helpfulness, harmless refusals, honesty tone, sycophancy, polished vagueness, and generic assistant style can be large, easy-to-trigger axes that show up instead of the thing you meant. - wassname
 
@@ -145,6 +143,13 @@ honesty/truthfulness, etc etc. The full
 rubric lives in the validation script.
 
 Code [scripts/validate_persona_axes_openrouter.py](scripts/validate_persona_axes_openrouter.py#L474).
+
+Setup:
+
+```sh
+uv sync
+just --list
+```
 
 ## Acknowledgements
 
@@ -171,12 +176,9 @@ This library samples from or was shaped by:
 }
 ```
 
-```{python}
-#| output: asis
-print(results_table._appendix_block())
-```
+## Appendices
 
-## Appendix: Validating Scenario Prompts (An In-House Extension)
+## Appendix: Choosing Scenario Suffixes
 
 The pilot table above varies the *persona template* and holds the scenario
 roughly fixed. This appendix does the orthogonal sweep: hold the persona pair
@@ -276,19 +278,12 @@ reasons), judged on reasoning depth rather than action, not a change of POV.
 Data: `data/persona_pairs_w2s_character.jsonl` (27 axis defs),
 `data/scenarios_w2s_character_3p.jsonl` (52 prompts).
 
-## Appendix: Run
+```{python}
+#| output: asis
+print(results_table._appendix_block())
+```
 
-```sh
-uv sync
-OPENROUTER_API_KEY=... uv run python scripts/validate_persona_axes_openrouter.py \
-  --axes data/persona_pairs_pilot_two.jsonl \
-  --templates data/template_catalog.yaml \
-  --family data/scenarios_v2_candidates.jsonl \
-  --n 2 \
-  --seed 24 \
-  --out out/persona_template_library_v2_pilot_seed24.json
-uv run python scripts/export_persona_template_stats.py \
-  out/persona_template_library_v2_pilot_seed24.json \
-  --out-prefix out/stats/v2_pilot_seed24
-just readme
+```{python}
+#| output: asis
+print(model_matrix._appendix_block(model_matrix.SUMMARY))
 ```
