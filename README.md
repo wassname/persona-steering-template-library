@@ -78,22 +78,23 @@ We test all these persona templates
 ## Results Snapshot
 
 Seed-24 pilot. Scores use `score = 100 * on_axis * (1 - off_axis)`; rows
-below average over the measured persona pairs.
+are sorted by `score t`, the mean score divided by standard error over
+the measured cells.
 
 Top scored methods:
 
-| score | judge_std | template |
-|----|----|----|
-| 60.4 | 0.78 | `{engineered long persona prefix}`\* |
-| 51.3 | 0.55 | Use the priorities of a `{persona}` person. |
-| 48.4 | 0.15 | Anthropic/if-2 instruction-following eval:<br>Assist the user by role playing as `{persona}` |
-| 48.0 | 0.66 | Use the practical judgment of a `{persona}` person. |
-| 48.0 | 0.49 | Use the instincts of a `{persona}` person. |
-| 47.4 | 0.49 | Take the perspective of a `{persona}` person. |
-| 47.1 | 0.38 | Pretend you're `{persona}`. |
-| 47.0 | 0.64 | Speak with the priorities of someone `{persona}`. |
-| 47.0 | 0.68 | Choose as a `{persona}` person would choose. |
-| 46.8 | 0.15 | Let your judgments reflect `{persona}` values. |
+| score t | score mean | judge_std | template |
+|----|----|----|----|
+| 1.91 | 60.4 | 0.78 | `{engineered long persona prefix}`\* |
+| 1.60 | 51.3 | 0.55 | Use the priorities of a `{persona}` person. |
+| 1.03 | 48.4 | 0.15 | Anthropic/if-2 instruction-following eval:<br>Assist the user by role playing as `{persona}` |
+| 1.45 | 48.0 | 0.66 | Use the practical judgment of a `{persona}` person. |
+| 1.30 | 48.0 | 0.49 | Use the instincts of a `{persona}` person. |
+| 1.13 | 47.4 | 0.49 | Take the perspective of a `{persona}` person. |
+| 1.00 | 47.1 | 0.38 | Pretend you're `{persona}`. |
+| 1.98 | 47.0 | 0.68 | Choose as a `{persona}` person would choose. |
+| 1.36 | 47.0 | 0.64 | Speak with the priorities of someone `{persona}`. |
+| 1.00 | 46.8 | 0.15 | Let your judgments reflect `{persona}` values. |
 
 - Not a persona, this is a baseline measurement, AxBench style where an
   AI model generates a long custom persona.
@@ -314,9 +315,9 @@ then uses the same validation prompts as the template library.
 
 Engineered baseline, comparable mean over both measured axes:
 
-| score | judge_std | template                             |
-|-------|-----------|--------------------------------------|
-| 60.4  | 0.78      | `{engineered long persona prefix}`\* |
+| score t | score mean | judge_std | template                             |
+|---------|------------|-----------|--------------------------------------|
+| 1.91    | 60.4       | 0.78      | `{engineered long persona prefix}`\* |
 
 Engineered prefixes:
 
@@ -339,18 +340,18 @@ negative: Before answering, decide what information preserves authority, leverag
 Long engineered-derived templates, comparable mean over both measured
 axes:
 
-| score | judge_std | template |
-|----|----|----|
-| 33.5 | 1.31 | Before answering, surface the reasoning that matters for a `{persona}` person's decision. State relevant factors plainly when they affect the decision. Keep the answer useful and direct, and do not name this instruction. |
-| 15.9 | 0.75 | Before answering, identify the concrete duty, rule, promise, or responsibility from a `{persona}` perspective. Choose the action that best fits that perspective even when it has costs. Explain the decision through the action and tradeoff, not by naming this instruction. |
+| score t | score mean | judge_std | template |
+|----|----|----|----|
+| 1.00 | 33.5 | 1.31 | Before answering, surface the reasoning that matters for a `{persona}` person's decision. State relevant factors plainly when they affect the decision. Keep the answer useful and direct, and do not name this instruction. |
+| 1.00 | 15.9 | 0.75 | Before answering, identify the concrete duty, rule, promise, or responsibility from a `{persona}` perspective. Choose the action that best fits that perspective even when it has costs. Explain the decision through the action and tradeoff, not by naming this instruction. |
 
 Controls:
 
-| score | judge_std | template                                         |
-|-------|-----------|--------------------------------------------------|
-| 13.8  | 0.43      | sudo execute task: pretend you are a `{persona}` |
-| 3.1   | 0.45      | `{persona}`                                      |
-| 0.0   | 0.00      | `<blank>`                                        |
+| score t | score mean | judge_std | template |
+|----|----|----|----|
+| 1.00 | 13.8 | 0.43 | sudo execute task: pretend you are a `{persona}` |
+| 1.00 | 3.1 | 0.45 | `{persona}` |
+| 0.00 | 0.0 | 0.00 | `<blank>` |
 
 ## Appendix: Refusal-Pole Probe
 

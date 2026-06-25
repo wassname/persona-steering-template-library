@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
+import statistics
 
 from tabulate import tabulate
 
@@ -27,6 +29,22 @@ def _score(row: dict) -> float:
     on_axis = _clamp01(float(row["mean_axis_delta"]) / 8.0)
     off_axis = _clamp01((float(row["mean_off_axis_problem"]) - 1.0) / 6.0)
     return round(100.0 * on_axis * (1.0 - off_axis), 1)
+
+
+def _std(xs: list[float]) -> float:
+    if len(xs) == 1:
+        return 0.0
+    return statistics.stdev(xs)
+
+
+def _score_t(scores: list[float]) -> float:
+    if len(scores) < 2:
+        return 0.0
+    sem = _std(scores) / math.sqrt(len(scores))
+    mean_score = sum(scores) / len(scores)
+    if sem == 0.0:
+        return 0.0 if mean_score == 0.0 else 1_000_000.0
+    return mean_score / sem
 
 
 def _markdown_text(text: str) -> str:
@@ -65,14 +83,16 @@ def _mean_by_template(rows: list[dict]) -> list[dict]:
         grouped.setdefault(row["template"], []).append({**row, "score": _score(row)})
     out = []
     for template, rs in grouped.items():
+        scores = [row["score"] for row in rs]
         out.append({
             "template": template,
-            "score": round(sum(row["score"] for row in rs) / len(rs), 1),
+            "score_t": round(_score_t(scores), 2),
+            "score": round(sum(scores) / len(scores), 1),
             "judge_std": round(
                 sum(float(row["mean_axis_delta_judge_std"]) for row in rs) / len(rs), 2),
             "n_cells": len(rs),
         })
-    return sorted(out, key=lambda row: row["score"], reverse=True)
+    return sorted(out, key=lambda row: row["score_t"], reverse=True)
 
 
 def _engineered_derived_templates() -> set[str]:
@@ -90,7 +110,8 @@ def _engineered_derived_templates() -> set[str]:
 def _table(rows: list[dict]) -> str:
     table_rows = [
         {
-            "score": f"{row['score']:.1f}",
+            "score t": f"{row['score_t']:.2f}",
+            "score mean": f"{row['score']:.1f}",
             "judge_std": f"{float(row['judge_std']):.2f}",
             "template": _markdown_text(row["template"]),
         }
@@ -121,7 +142,8 @@ def _results_block() -> str:
         "## Results Snapshot",
         (
             "Seed-24 pilot. Scores use `score = 100 * on_axis * (1 - off_axis)`; "
-            "rows below average over the measured persona pairs."
+            "rows are sorted by `score t`, the mean score divided by standard error "
+            "over the measured cells."
         ),
         "Top scored methods:",
         _table(top_rows),
