@@ -26,11 +26,7 @@ def _score(row: dict) -> float:
 def _markdown_text(text: str) -> str:
     if text == "__verbatim_skill_persona__":
         text = ENGINEERED_DISPLAY
-    if "<!-- instruction following eval, Anthropic/if-2 -->" in text:
-        text = text.replace(
-            "<!-- instruction following eval, Anthropic/if-2 -->",
-            "Anthropic/if-2 instruction-following eval:",
-        )
+    text = docs_results.display_template_text(text)
     if text == "":
         return "`<blank>`"
     text = text.replace("{{ persona }}", "{persona}")

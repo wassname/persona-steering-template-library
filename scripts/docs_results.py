@@ -22,9 +22,16 @@ REFUSAL_MODEL_PAIR_STATS = [
 ]
 REFUSAL_MODEL_PREFIX = ROOT / "out/model_matrix/refusal_probe_seed24_n1"
 
+ANTHROPIC_IF2_COMMENT = "<!-- instruction following eval, Anthropic/if-2 -->"
+ANTHROPIC_IF2_LABEL = "Anthropic/if-2 instruction-following eval:"
+
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+
+
+def display_template_text(text: str) -> str:
+    return text.replace(ANTHROPIC_IF2_COMMENT, ANTHROPIC_IF2_LABEL)
 
 
 def clamp01(x: float) -> float:

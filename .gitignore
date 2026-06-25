@@ -19,3 +19,5 @@ docs/_site/
 **/.quarto/
 **/*.quarto_ipynb
 docs/.gitignore
+
+/.quarto/

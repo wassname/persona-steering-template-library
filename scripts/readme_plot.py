@@ -14,6 +14,7 @@ MAIN_SVG = docs_results.ROOT / "out/on_off_axis.svg"
 
 
 def _wrap_hover(text: str, width: int = 62) -> str:
+    text = docs_results.display_template_text(text)
     escaped = html.escape(" ".join(text.split()))
     return "<br>".join(
         textwrap.wrap(escaped, width=width, break_long_words=True, break_on_hyphens=False))

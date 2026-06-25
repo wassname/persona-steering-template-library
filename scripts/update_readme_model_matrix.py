@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import html
 import json
+import os
 from pathlib import Path
 
 from tabulate import tabulate
 
+import docs_results
 
 ROOT = Path(__file__).resolve().parents[1]
 SUMMARY = ROOT / "out/model_matrix/refusal_probe_seed24_n1_template_model_summary.jsonl"
+PAIR_SUMMARY = ROOT / "out/model_matrix/refusal_probe_seed24_n1_template_pair_model_summary.jsonl"
 
 
 def _read_jsonl(path: Path) -> list[dict]:
@@ -15,11 +19,7 @@ def _read_jsonl(path: Path) -> list[dict]:
 
 
 def _markdown_text(text: str) -> str:
-    if "<!-- instruction following eval, Anthropic/if-2 -->" in text:
-        text = text.replace(
-            "<!-- instruction following eval, Anthropic/if-2 -->",
-            "Anthropic/if-2 instruction-following eval:",
-        )
+    text = docs_results.display_template_text(text)
     text = text.replace("{persona}", "`{persona}`")
     text = text.replace("&", "&amp;")
     text = text.replace("<", "&lt;")
@@ -42,8 +42,7 @@ def _appendix_table(rows: list[dict]) -> str:
     return tabulate(table_rows, headers="keys", tablefmt="github", disable_numparse=True)
 
 
-def _appendix_block(summary_path: Path) -> str:
-    rows = _read_jsonl(summary_path)
+def _appendix_intro() -> str:
     return "\n\n".join([
         "## Appendix: Refusal-Pole Probe",
         (
@@ -67,12 +66,147 @@ def _appendix_block(summary_path: Path) -> str:
             "[out/model_matrix/refusal_probe_seed24_n1_model_matrix_summary.md]"
             "(out/model_matrix/refusal_probe_seed24_n1_model_matrix_summary.md)."
         ),
+    ])
+
+
+def _appendix_block(summary_path: Path) -> str:
+    rows = _read_jsonl(summary_path)
+    return "\n\n".join([
+        _appendix_intro(),
         _appendix_table(rows),
     ])
 
 
+def _template_display_text(text: str) -> str:
+    text = docs_results.display_template_text(text)
+    text = " ".join(text.split())
+    return text.replace("{persona}", "{persona}")
+
+
+def _table_styles() -> str:
+    return """
+<style>
+.refusal-table-wrap {
+  margin: 1rem 0 2rem;
+}
+.refusal-table-wrap table.dataTable {
+  width: 100% !important;
+}
+.refusal-table-wrap table.dataTable td,
+.refusal-table-wrap table.dataTable th {
+  vertical-align: top;
+}
+.refusal-table-wrap table.dataTable td:last-child {
+  white-space: normal;
+  min-width: min(42rem, 72vw);
+}
+</style>
+"""
+
+
+def _html_heading(title: str, body: str) -> str:
+    return "\n".join([
+        f"<h3>{html.escape(title)}</h3>",
+        f"<p>{html.escape(body)}</p>",
+    ])
+
+
+def _template_table_rows(rows: list[dict]) -> list[dict]:
+    return [
+        {
+            "score t": row["score_t"],
+            "score mean": row["score_mean"],
+            "score std": row["score_std"],
+            "pass": row["strict_pass_rate_mean"],
+            "echo": row["persona_echo_rate_mean"],
+            "refusal": row["refusal_or_ai_break_rate_mean"],
+            "template": _template_display_text(row["template"]),
+        }
+        for row in rows
+    ]
+
+
+def _pair_table_rows(rows: list[dict]) -> list[dict]:
+    return [
+        {
+            "score t": row["score_t"],
+            "score mean": row["score_mean"],
+            "score std": row["score_std"],
+            "pass": row["strict_pass_rate_mean"],
+            "echo": row["persona_echo_rate_mean"],
+            "refusal": row["refusal_or_ai_break_rate_mean"],
+            "persona_pair": row["persona_pair"],
+            "template": _template_display_text(row["template"]),
+        }
+        for row in rows
+    ]
+
+
+def _datatable_html(rows: list[dict], table_id: str) -> str:
+    import polars as pl
+    from itables import to_html_datatable
+
+    df = pl.DataFrame(rows)
+    return "\n".join([
+        f'<div id="{table_id}" class="refusal-table-wrap">',
+        to_html_datatable(
+            df,
+            classes="display compact cell-border stripe",
+            display_logo_when_loading=False,
+            paging=True,
+            pageLength=25,
+            lengthMenu=[10, 25, 50, 100, -1],
+            ordering=True,
+            scrollX=True,
+            autoWidth=False,
+            show_dtypes=False,
+            showIndex=False,
+            maxBytes=1_000_000,
+        ),
+        "</div>",
+    ])
+
+
+def _interactive_appendix_block(summary_path: Path, pair_summary_path: Path) -> str:
+    template_rows = _read_jsonl(summary_path)
+    pair_rows = _read_jsonl(pair_summary_path)
+    refusal_hit_pairs = sorted({
+        row["persona_pair"]
+        for row in pair_rows
+        if float(row["refusal_or_ai_break_rate_mean"]) > 0.0
+    })
+    refusal_pair_rows = [
+        row for row in pair_rows
+        if row["persona_pair"] in refusal_hit_pairs
+    ]
+
+    return "\n\n".join([
+        _appendix_intro(),
+        _table_styles(),
+        _html_heading(
+            "All refusal-pole templates",
+            "Full model-equal template table. Sort by score t, refusal, echo, or pass; search for a template phrase.",
+        ),
+        _datatable_html(_template_table_rows(template_rows), "refusal-template-table"),
+        _html_heading(
+            "Persona pairs with refusal audit hits, all templates retained",
+            (
+                "This filters persona pairs to those with any refusal-or-AI-break audit hit, "
+                f"then keeps every template for those pairs. Current pairs: {', '.join(refusal_hit_pairs)}."
+            ),
+        ),
+        _datatable_html(_pair_table_rows(refusal_pair_rows), "refusal-pair-table"),
+    ])
+
+
+def appendix_block() -> str:
+    if os.environ["PSTL_DOC_TARGET"] == "html":
+        return _interactive_appendix_block(SUMMARY, PAIR_SUMMARY)
+    return _appendix_block(SUMMARY)
+
+
 def main() -> None:
-    print(_appendix_block(SUMMARY))
+    print(appendix_block())
 
 
 if __name__ == "__main__":

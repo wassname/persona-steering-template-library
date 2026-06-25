@@ -141,11 +141,7 @@ def _summarize(rows: list[dict[str, Any]], group_cols: list[str]) -> list[dict[s
 
 
 def _markdown_text(text: str) -> str:
-    if "<!-- instruction following eval, Anthropic/if-2 -->" in text:
-        text = text.replace(
-            "<!-- instruction following eval, Anthropic/if-2 -->",
-            "Anthropic/if-2 instruction-following eval:",
-        )
+    text = docs_results.display_template_text(text)
     text = text.replace("{persona}", "`{persona}`")
     text = text.replace("&", "&amp;")
     text = text.replace("<", "&lt;")

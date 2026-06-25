@@ -14,7 +14,7 @@ execute:
 
 Evaluated persona/template candidates for steering-vector and preference-pair experiments.
 
-Dataset: https://huggingface.co/datasets/wassname/persona-steering-template-library
+Dataset: [wassname/persona-steering-template-library](https://huggingface.co/datasets/wassname/persona-steering-template-library)
 
 ```{python}
 #| output: asis
@@ -171,13 +171,13 @@ just --list
 
 This library samples from or was shaped by:
 
-- repeng: https://github.com/vgel/repeng
-- Persona Vectors: https://github.com/safety-research/persona_vectors
-- Assistant Axis: https://github.com/safety-research/assistant-axis
-- weight-steering: https://github.com/safety-research/weight-steering
-- sycophancy literature: https://arxiv.org/abs/2310.13548
-- OLMo 3 report: https://arxiv.org/abs/2512.13961
-- wassname/AntiPaSTO: https://github.com/wassname/AntiPaSTO
+- [repeng](https://github.com/vgel/repeng)
+- [Persona Vectors](https://github.com/safety-research/persona_vectors)
+- [Assistant Axis](https://github.com/safety-research/assistant-axis)
+- [weight-steering](https://github.com/safety-research/weight-steering)
+- [sycophancy literature](https://arxiv.org/abs/2310.13548)
+- [OLMo 3 report](https://arxiv.org/abs/2512.13961)
+- [wassname/AntiPaSTO](https://github.com/wassname/AntiPaSTO)
 - annotated guide: [`docs/persona_prompt_prior_art.md`](docs/persona_prompt_prior_art.md)
 - full inventory: [`data/template_catalog.yaml`](data/template_catalog.yaml)
 
@@ -301,5 +301,5 @@ print(results_table._appendix_block())
 
 ```{python}
 #| output: asis
-print(model_matrix._appendix_block(model_matrix.SUMMARY))
+print(model_matrix.appendix_block())
 ```
