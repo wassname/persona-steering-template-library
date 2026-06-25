@@ -4,6 +4,7 @@ format:
   gfm: default
   html:
     toc: true
+    css: docs/quarto-wide.css
 from: markdown-smart
 jupyter: python3
 execute:
