@@ -355,10 +355,27 @@ Controls:
 
 ## Appendix: Refusal-Pole Probe
 
-This is a separate two-axis refusal/harm probe across four clean
-generator artifacts. It is not the main template result, because it does
-not cover all persona pairs. Treat it as a filter for templates worth
-retesting on refusal-ish negative poles in the main evaluation frame.
+This is a rejected-pole slice: it keeps the template and suffix sweep
+unfiltered, then evaluates persona pairs whose negative/rejected pole is
+refusal-prone or harm-adjacent. It is not the main template result,
+because it does not cover all persona pairs.
+
+Why include it? These negative poles can collapse into generic safety
+refusal, AI-role breaks, or persona echo instead of the intended
+behavioral contrast. This plot is a quick check for templates that move
+those hard axes without simply making the model refuse.
+
+![refusal-pole
+probe](./out/model_matrix/refusal_probe_seed24_n1_model_matrix.png)
+
+Caption: each dot is one template, averaged over the two refusal-probe
+axes and four clean models. Right is more on-axis movement; lower is
+less off-axis confounding. Numbered dots are the first rows of the
+appendix table.
+
+`refusal_or_ai_break_rate` is only an output audit column: it marks
+completions that refused or broke AI role, and is not used to select
+this data slice.
 
 Interactive hover plot: [GitHub
 Pages](https://wassname.github.io/persona-steering-template-library/).

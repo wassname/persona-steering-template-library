@@ -1,0 +1,40 @@
+name: Quarto Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: quarto-dev/quarto-actions/setup@v2
+      - uses: actions/configure-pages@v5
+      - run: uv sync
+      - run: uv run python scripts/summarize_model_matrix.py
+      - run: |
+          QUARTO_PYTHON="$(uv run python -c 'import sys; print(sys.executable)')" \
+            quarto render docs/index.qmd --to html --output-dir _site
+      - run: |
+          mkdir -p docs/_site/out/model_matrix
+          cp out/model_matrix/refusal_probe_seed24_n1_model_matrix.svg docs/_site/out/model_matrix/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/_site
+      - id: deployment
+        uses: actions/deploy-pages@v4

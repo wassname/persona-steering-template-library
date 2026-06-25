@@ -13,8 +13,10 @@ execute:
 
 ```{python}
 from pathlib import Path
+import html
 import json
 import sys
+import textwrap
 
 import plotly.graph_objects as go
 
@@ -30,6 +32,13 @@ the refusal-pole probe without forcing the README plot to carry every label.
 ```{python}
 summary_path = ROOT / "out/model_matrix/refusal_probe_seed24_n1_template_model_summary.jsonl"
 rows = [json.loads(line) for line in summary_path.read_text().splitlines() if line.strip()]
+
+
+def wrap_tooltip_text(text: str, width: int = 56) -> str:
+    escaped = html.escape(" ".join(text.split()))
+    return "<br>".join(
+        textwrap.wrap(escaped, width=width, break_long_words=True, break_on_hyphens=False))
+
 
 plot_rows = []
 for i, row in enumerate(rows, start=1):
@@ -49,7 +58,7 @@ for i, row in enumerate(rows, start=1):
 
 hover = [
     "<br>".join([
-        f"<b>{row['template']}</b>",
+        f"<b>{wrap_tooltip_text(row['template'])}</b>",
         f"rank: {row['rank']}",
         f"score t: {row['score_t']:.2f}",
         f"score p25: {row['score_p25']:.2f}",
@@ -82,8 +91,8 @@ fig = go.Figure(
     )
 )
 fig.update_layout(
-    width=980,
-    height=720,
+    autosize=True,
+    height=680,
     yaxis={"range": [-0.02, 1.02]},
     xaxis={"range": [-0.02, 1.02]},
     template="plotly_white",
@@ -97,3 +106,7 @@ fig.show()
 Each point is one template, averaged over two refusal-probe axes and four clean
 model artifacts. Lower-right is better: more intended-axis movement with less
 off-axis confounding.
+
+## Static SVG
+
+![Static refusal-pole probe](out/model_matrix/refusal_probe_seed24_n1_model_matrix.svg)

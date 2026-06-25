@@ -258,10 +258,14 @@ def main() -> None:
     _write_jsonl(prefix.with_name(prefix.name + "_template_pair_model_summary.jsonl"), pair_rows)
     _write_csv(prefix.with_name(prefix.name + "_template_pair_model_summary.csv"), pair_rows)
     _write_markdown(prefix.with_name(prefix.name + "_model_matrix_summary.md"), template_rows, pair_rows, args.top_n)
-    _plot(prefix.with_name(prefix.name + "_model_matrix.png"), template_rows, label_count=10)
+    png_path = prefix.with_name(prefix.name + "_model_matrix.png")
+    svg_path = prefix.with_name(prefix.name + "_model_matrix.svg")
+    _plot(png_path, template_rows, label_count=10)
+    _plot(svg_path, template_rows, label_count=10)
     print(f"models={expected_models} templates={len(template_rows)} template_pairs={len(pair_rows)}")
     print(prefix.with_name(prefix.name + "_model_matrix_summary.md"))
-    print(prefix.with_name(prefix.name + "_model_matrix.png"))
+    print(png_path)
+    print(svg_path)
 
 
 if __name__ == "__main__":

@@ -14,3 +14,8 @@ data/*seed*.csv
 data/template_catalog.jsonl
 data/template_sources.jsonl
 data/templates_v2_candidates*.txt
+_site/
+docs/_site/
+**/.quarto/
+**/*.quarto_ipynb
+docs/.gitignore
