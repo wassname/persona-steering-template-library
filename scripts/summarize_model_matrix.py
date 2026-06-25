@@ -53,14 +53,8 @@ def _std(xs: list[float]) -> float:
     return statistics.stdev(xs)
 
 
-def _sem(std: float, n: int) -> float:
-    return std / math.sqrt(n)
-
-
-def _t_stat(mean: float, sem: float) -> float | None:
-    if sem == 0.0:
-        return None
-    return mean / sem
+def _p25(xs: list[float]) -> float:
+    return statistics.quantiles(xs, n=4, method="inclusive")[0]
 
 
 def _round(x: float, digits: int = 3) -> float:
@@ -115,17 +109,12 @@ def _summarize(rows: list[dict[str, Any]], group_cols: list[str]) -> list[dict[s
         models = sorted({row["model"] for row in rs})
         base = dict(zip(group_cols, key, strict=True))
         model_count = len(models)
-        score_mean = _mean([float(row["score"]) for row in rs])
-        score_std = _std([float(row["score"]) for row in rs])
-        score_sem = _sem(score_std, model_count)
-        score_t = _t_stat(score_mean, score_sem)
+        scores = [float(row["score"]) for row in rs]
         out.append({
             "model_count": model_count,
-            "score_lcb": _round(score_mean - score_sem, 2),
-            "score_mean": _round(score_mean, 2),
-            "score_std": _round(score_std, 2),
-            "score_sem": _round(score_sem, 2),
-            "score_t": None if score_t is None else _round(score_t, 2),
+            "score_p25": _round(_p25(scores), 2),
+            "score_mean": _round(_mean(scores), 2),
+            "score_std": _round(_std(scores), 2),
             "strict_pass_rate_mean": _round(_mean([float(row["strict_pass_rate"]) for row in rs]), 3),
             "strict_pass_rate_std": _round(_std([float(row["strict_pass_rate"]) for row in rs]), 3),
             "axis_delta_mean": _round(_mean([float(row["mean_axis_delta"]) for row in rs]), 3),
@@ -140,7 +129,7 @@ def _summarize(rows: list[dict[str, Any]], group_cols: list[str]) -> list[dict[s
             "models": ",".join(models),
             **base,
         })
-    return sorted(out, key=lambda row: row["score_lcb"], reverse=True)
+    return sorted(out, key=lambda row: row["score_p25"], reverse=True)
 
 
 def _markdown_text(text: str) -> str:
@@ -161,14 +150,10 @@ def _markdown_text(text: str) -> str:
 def _write_markdown(path: Path, template_rows: list[dict[str, Any]], pair_rows: list[dict[str, Any]], top_n: int) -> None:
     top_template_rows = [
         {
-            "score lcb": f"{row['score_lcb']:.2f}",
+            "score p25": f"{row['score_p25']:.2f}",
             "score mean": f"{row['score_mean']:.2f}",
             "score std": f"{row['score_std']:.2f}",
-            "score sem": f"{row['score_sem']:.2f}",
-            "score t": "" if row["score_t"] is None else f"{row['score_t']:.2f}",
             "pass mean": f"{row['strict_pass_rate_mean']:.2f}",
-            "axis mean": f"{row['axis_delta_mean']:.2f}",
-            "off-axis mean": f"{row['off_axis_problem_mean']:.2f}",
             "echo rate": f"{row['persona_echo_rate_mean']:.2f}",
             "refusal rate": f"{row['refusal_or_ai_break_rate_mean']:.2f}",
             "models": row["model_count"],
@@ -176,39 +161,17 @@ def _write_markdown(path: Path, template_rows: list[dict[str, Any]], pair_rows: 
         }
         for row in template_rows[:top_n]
     ]
-    top_pair_rows = [
-        {
-            "score lcb": f"{row['score_lcb']:.2f}",
-            "score mean": f"{row['score_mean']:.2f}",
-            "score std": f"{row['score_std']:.2f}",
-            "score sem": f"{row['score_sem']:.2f}",
-            "score t": "" if row["score_t"] is None else f"{row['score_t']:.2f}",
-            "pass mean": f"{row['strict_pass_rate_mean']:.2f}",
-            "axis mean": f"{row['axis_delta_mean']:.2f}",
-            "off-axis mean": f"{row['off_axis_problem_mean']:.2f}",
-            "echo rate": f"{row['persona_echo_rate_mean']:.2f}",
-            "refusal rate": f"{row['refusal_or_ai_break_rate_mean']:.2f}",
-            "models": row["model_count"],
-            "axis": f"`{row['persona_pair']}`",
-            "template": _markdown_text(row["template"]),
-        }
-        for row in pair_rows[:top_n]
-    ]
     lines = [
         "# Refusal Probe Model Matrix",
         "",
-        "Scores are model-equal. Each model first averages the two refusal-probe axes per template, then the table reports mean and sample std across clean model artifacts.",
+        "Scores are model-equal. Each model first averages the two refusal-probe axes per template, then the table reports reliability-sorted template rows across clean model artifacts.",
         "",
-        "## Top Templates",
+        "## All Templates",
+        "",
+        "`score p25` is the 25th percentile score across the four clean model artifacts. Rows are sorted by this column.",
         "",
         tabulate(top_template_rows, headers="keys", tablefmt="github", disable_numparse=True),
     ]
-    lines.extend([
-        "",
-        "## Top Template-Axis Cells",
-        "",
-        tabulate(top_pair_rows, headers="keys", tablefmt="github", disable_numparse=True),
-    ])
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -255,7 +218,7 @@ def _plot(path: Path, rows: list[dict[str, Any]], label_count: int) -> None:
     ax.text(
         1.0,
         -0.13,
-        "error bars are model SEM; point numbers match the top-template table",
+        "error bars are model SEM; point numbers match the first table rows",
         transform=ax.transAxes,
         ha="right",
         fontsize=8,

@@ -37,13 +37,10 @@ def _markdown_text(text: str) -> str:
 def _table(rows: list[dict], top_n: int) -> str:
     table_rows = [
         {
-            "score lcb": f"{row['score_lcb']:.2f}",
+            "score p25": f"{row['score_p25']:.2f}",
             "score mean": f"{row['score_mean']:.2f}",
             "score std": f"{row['score_std']:.2f}",
-            "score t": "" if row["score_t"] is None else f"{row['score_t']:.2f}",
             "pass mean": f"{row['strict_pass_rate_mean']:.2f}",
-            "axis mean": f"{row['axis_delta_mean']:.2f}",
-            "off-axis mean": f"{row['off_axis_problem_mean']:.2f}",
             "echo rate": f"{row['persona_echo_rate_mean']:.2f}",
             "refusal rate": f"{row['refusal_or_ai_break_rate_mean']:.2f}",
             "template": _markdown_text(row["template"]),
@@ -51,18 +48,6 @@ def _table(rows: list[dict], top_n: int) -> str:
         for row in rows[:top_n]
     ]
     return tabulate(table_rows, headers="keys", tablefmt="github", disable_numparse=True)
-
-
-def _full_ranked_block(summary_path: Path) -> str:
-    rows = _read_jsonl(summary_path)
-    return "\n\n".join([
-        "## Appendix: Full Refusal Probe Model Matrix",
-        (
-            "`score lcb` is `score mean - score sem`, a one-standard-error lower score. "
-            "Rows are sorted by this reliability-weighted score; `score t` is `mean / sem`."
-        ),
-        _table(rows, top_n=len(rows)),
-    ])
 
 
 def _block(summary_path: Path) -> str:
@@ -78,17 +63,23 @@ def _block(summary_path: Path) -> str:
         (
             "This table reports mean and sample std across models. Each model first averages "
             "the two probe axes for a template, so this is model-equal rather than row-equal. "
-            "`score lcb` is the headline sort because it penalizes model-to-model instability. "
-            "High std, persona echo, and refusal rate are warnings, not secondary scores."
+            "`score p25` is the headline sort: it is the 25th percentile score across the "
+            "four clean model artifacts, so a template has to work on more than one model to rank well."
         ),
         "![refusal probe model matrix](./out/model_matrix/refusal_probe_seed24_n1_model_matrix.png)",
-        "Top model-matrix templates:",
-        _table(rows, top_n=10),
+        (
+            "Caption: each dot is one template. Right is more on-axis movement; lower is less "
+            "off-axis confounding. Black dots have at least one strict-pass template-axis cell; "
+            "grey dots have none. Numbered dots are the first rows of the table. Error bars show "
+            "model SEM for those numbered rows only."
+        ),
+        "Model-matrix templates, all rows:",
+        _table(rows, top_n=len(rows)),
         (
             "Interpretation: some explicit judgment framings and red-team/eval framings move "
             "the hard axis more often than the gentle templates, but they frequently do so "
             "with persona echo or model-specific behavior. The cleanest-looking single-axis "
-            "cells were often `protocol_harm`, so treat the top rows as rerun candidates "
+            "cells were often `protocol_harm`, so treat the high rows as rerun candidates "
             "rather than settled reusable defaults."
         ),
         "Excluded attempted models:",

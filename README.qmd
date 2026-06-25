@@ -176,11 +176,6 @@ This library samples from or was shaped by:
 print(results_table._appendix_block())
 ```
 
-```{python}
-#| output: asis
-print(model_matrix._full_ranked_block(model_matrix.SUMMARY))
-```
-
 ## Appendix: Validating Scenario Prompts (An In-House Extension)
 
 The pilot table above varies the *persona template* and holds the scenario
