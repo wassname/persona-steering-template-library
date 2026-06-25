@@ -39,10 +39,6 @@ def _table(rows: list[dict], top_n: int) -> str:
         {
             "score p25": f"{row['score_p25']:.2f}",
             "score mean": f"{row['score_mean']:.2f}",
-            "score std": f"{row['score_std']:.2f}",
-            "pass mean": f"{row['strict_pass_rate_mean']:.2f}",
-            "echo rate": f"{row['persona_echo_rate_mean']:.2f}",
-            "refusal rate": f"{row['refusal_or_ai_break_rate_mean']:.2f}",
             "template": _markdown_text(row["template"]),
         }
         for row in rows[:top_n]
@@ -61,38 +57,26 @@ def _block(summary_path: Path) -> str:
             "`qwen/qwen3.6-flash`, and `ibm-granite/granite-4.1-8b`."
         ),
         (
-            "This table reports mean and sample std across models. Each model first averages "
-            "the two probe axes for a template, so this is model-equal rather than row-equal. "
-            "`score p25` is the headline sort: it is the 25th percentile score across the "
-            "four clean model artifacts, so a template has to work on more than one model to rank well."
+            "Each model first averages the two probe axes for a template, so this is "
+            "model-equal rather than row-equal. `score p25` is the headline sort: it is "
+            "the 25th percentile score across the four clean model artifacts, so a template "
+            "has to work on more than one model to rank well."
         ),
         "![refusal probe model matrix](./out/model_matrix/refusal_probe_seed24_n1_model_matrix.png)",
         (
-            "Caption: each dot is one template. Right is more on-axis movement; lower is less "
-            "off-axis confounding. Black dots have at least one strict-pass template-axis cell; "
-            "grey dots have none. Numbered dots are the first rows of the table. Error bars show "
-            "model SEM for those numbered rows only."
+            "Caption: this is a template overview, not a persona plot. Each dot is one template, "
+            "averaged over the two refusal-probe axes and four clean models. Right is more "
+            "on-axis movement; lower is less off-axis confounding. Black dots have at least one "
+            "strict-pass template-axis cell; grey dots have none. Numbered dots are the first "
+            "rows of the table."
         ),
         "Model-matrix templates, all rows:",
         _table(rows, top_n=len(rows)),
         (
             "Interpretation: some explicit judgment framings and red-team/eval framings move "
-            "the hard axis more often than the gentle templates, but they frequently do so "
-            "with persona echo or model-specific behavior. The cleanest-looking single-axis "
+            "the hard axis more often than the gentle templates. The cleanest-looking single-axis "
             "cells were often `protocol_harm`, so treat the high rows as rerun candidates "
             "rather than settled reusable defaults."
-        ),
-        "Excluded attempted models:",
-        "\n".join([
-            "| model | result |",
-            "|---|---|",
-            "| `google/gemma-2-9b-it` | OpenRouter returned no endpoints for all 190 cells. |",
-            "| `openai/gpt-oss-120b` | OpenRouter returned `Reasoning is mandatory for this endpoint and cannot be disabled` for all 190 cells. |",
-            "| `deepseek/deepseek-v4-flash` | Reproduced 3 empty-generation cells out of 190, so excluded from aggregate instead of averaging missing data. |",
-        ]),
-        (
-            "Full generated table:\n"
-            "[`out/model_matrix/refusal_probe_seed24_n1_model_matrix_summary.md`](out/model_matrix/refusal_probe_seed24_n1_model_matrix_summary.md)."
         ),
     ])
 
