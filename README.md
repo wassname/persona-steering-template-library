@@ -7,10 +7,25 @@ preference-pair experiments.
 Dataset:
 [wassname/persona-steering-template-library](https://huggingface.co/datasets/wassname/persona-steering-template-library)
 
+## Quick Start
+
+Use this repo to choose the prompt parts for persona steering:
+
+| choice | use |
+|----|----|
+| persona templates | Start with the top Results table, the Hugging Face `main` split, or [`data/template_catalog.yaml`](data/template_catalog.yaml). |
+| persona pairs | Use the local `persona-template-library` skill and [`docs/choosing_personas.md`](docs/choosing_personas.md) to write mirrored positive/negative poles. |
+| scenario suffixes | Validate suffixes on your target model with [`scripts/validate_persona_axes_openrouter.py`](scripts/validate_persona_axes_openrouter.py). |
+
+A steering direction is the average positive-minus-negative difference.
+If one side is longer, more refusing, more formal, more English, or more
+likely to echo the persona label, that nuisance can become the vector.
+
 ## What This Measures
 
-How do we know if a persona template is good? What's the best one for
-steering? And how can we measure it?
+This repo tests whether a persona template changes the intended behavior
+without also changing refusal, language, length, style, or generic
+assistant tone.
 
 The catalog has ~100 reusable templates. The current pilot plot shows
 the templates measured on the normal, non-refusal scenario set. We want
@@ -55,24 +70,12 @@ make it accessible to more people and agents.
 Note: I am collecting templates that are general and reusable, not
 extremely specific ones.
 
-## Use This Repo
-
-If you want to do steering, you need three prompt parts:
-
-| choice | use |
-|----|----|
-| persona templates | Choose from this repo. Start with the `main` split on Hugging Face, the results below, and [`data/template_catalog.yaml`](data/template_catalog.yaml). |
-| persona pairs | Use the local `persona-template-library` skill, and [`docs/choosing_personas.md`](docs/choosing_personas.md), to write mirrored positive/negative poles. |
-| scenario suffixes | Validate them on your target model. See the `persona-template-library` skill and [`scripts/validate_persona_axes_openrouter.py`](scripts/validate_persona_axes_openrouter.py). |
-
-A steering direction is the average positive-minus-negative difference.
-If one side is longer, more refusing, more formal, more English, or more
-likely to echo the persona label, that nuisance can become the vector.
-
 ## Results
 
-The plot below shows the measured normal-scenario template results. The
-full template inventory is
+Caption: each point is one measured template on the normal-scenario
+pilot set. Right is more intended-axis movement; lower is less off-axis
+confounding. Color is `score t`, the score mean divided by standard
+error. The full template inventory is
 [`data/template_catalog.yaml`](data/template_catalog.yaml).
 
 ![plot](./out/on_off_axis.png)
@@ -81,7 +84,8 @@ full template inventory is
 
 Seed-24 pilot. Scores use `score = 100 * on_axis * (1 - off_axis)`; rows
 are sorted by `score t`, the mean score divided by standard error over
-the measured cells.
+the measured cells. `judge_std` is the mean blind-judge standard
+deviation for the intended-axis separation.
 
 Top scored methods:
 
@@ -101,10 +105,12 @@ Top scored methods:
 - Not a persona, this is a baseline measurement, AxBench style where an
   AI model generates a long custom persona.
 
-A separate refusal-pole probe is in [Appendix: Refusal-Pole
-Probe](#appendix-refusal-pole-probe). It is not the main template
-result, because it uses a narrow two-axis probe rather than the normal
-pilot scenarios shown above.
+Full refusal-pole audit table:
+[out/model_matrix/refusal_probe_seed24_n1_model_matrix_summary.md](out/model_matrix/refusal_probe_seed24_n1_model_matrix_summary.md).
+
+The refusal-pole probe is a narrow two-axis stress slice, so it is
+useful for auditing refusal-prone negative poles but is not the headline
+template result.
 
 ## Method
 

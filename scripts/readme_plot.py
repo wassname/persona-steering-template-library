@@ -24,7 +24,7 @@ def main_plot_rows(path: Path = docs_results.NORMAL_TEMPLATE_PAIR_STATS) -> list
     return docs_results.mean_template_rows(docs_results.read_jsonl(path))
 
 
-def template_scatter(rows: list[dict[str, Any]] | None = None) -> go.Figure:
+def template_scatter(rows: list[dict[str, Any]] | None = None, width: int | None = None) -> go.Figure:
     rows = main_plot_rows() if rows is None else rows
     top_rank = {row["template"]: i for i, row in enumerate(rows[:10], start=1)}
     text = [str(top_rank[row["template"]]) if row["template"] in top_rank else "" for row in rows]
@@ -64,7 +64,7 @@ def template_scatter(rows: list[dict[str, Any]] | None = None) -> go.Figure:
     )
     fig.update_layout(
         autosize=True,
-        width=960,
+        width=width,
         height=620,
         template="plotly_white",
         margin={"l": 68, "r": 24, "t": 28, "b": 66},
@@ -92,7 +92,7 @@ def template_scatter(rows: list[dict[str, Any]] | None = None) -> go.Figure:
 
 
 def write_main_plot_assets() -> None:
-    fig = template_scatter()
+    fig = template_scatter(width=960)
     MAIN_PNG.parent.mkdir(parents=True, exist_ok=True)
     fig.write_image(MAIN_PNG, width=960, height=620, scale=2)
     fig.write_image(MAIN_SVG, width=960, height=620)

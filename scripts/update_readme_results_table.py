@@ -101,7 +101,8 @@ def _results_block() -> str:
         (
             "Seed-24 pilot. Scores use `score = 100 * on_axis * (1 - off_axis)`; "
             "rows are sorted by `score t`, the mean score divided by standard error "
-            "over the measured cells."
+            "over the measured cells. `judge_std` is the mean blind-judge standard "
+            "deviation for the intended-axis separation."
         ),
         "Top scored methods:",
         _table(top_rows),

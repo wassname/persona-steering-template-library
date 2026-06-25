@@ -12,6 +12,7 @@ import docs_results
 ROOT = Path(__file__).resolve().parents[1]
 SUMMARY = ROOT / "out/model_matrix/refusal_probe_seed24_n1_template_model_summary.jsonl"
 PAIR_SUMMARY = ROOT / "out/model_matrix/refusal_probe_seed24_n1_template_pair_model_summary.jsonl"
+ANTHROPIC_IF2_SHORT_LABEL = "Anthropic IF-2: role-play as {persona}"
 
 
 def _read_jsonl(path: Path) -> list[dict]:
@@ -80,6 +81,11 @@ def _appendix_block(summary_path: Path) -> str:
 def _template_display_text(text: str) -> str:
     text = docs_results.display_template_text(text)
     text = " ".join(text.split())
+    if (
+        text
+        == "Anthropic/if-2 instruction-following eval: Assist the user by role playing as {persona}"
+    ):
+        return ANTHROPIC_IF2_SHORT_LABEL
     return text.replace("{persona}", "{persona}")
 
 
@@ -167,7 +173,7 @@ def _datatable_html(rows: list[dict], table_id: str) -> str:
     ])
 
 
-def _interactive_appendix_block(summary_path: Path, pair_summary_path: Path) -> str:
+def _interactive_tables_block(summary_path: Path, pair_summary_path: Path) -> str:
     template_rows = _read_jsonl(summary_path)
     pair_rows = _read_jsonl(pair_summary_path)
     refusal_hit_pairs = sorted({
@@ -181,11 +187,10 @@ def _interactive_appendix_block(summary_path: Path, pair_summary_path: Path) -> 
     ]
 
     return "\n\n".join([
-        _appendix_intro(),
         _table_styles(),
         _html_heading(
-            "All refusal-pole templates",
-            "Full model-equal template table. Sort by score t, refusal, echo, or pass; search for a template phrase.",
+            "Refusal-pole probe, all templates",
+            "HTML only. Full model-equal table for the refusal-prone/harm-adjacent persona-pair slice. Sort by score t, refusal, echo, or pass; search for a template phrase.",
         ),
         _datatable_html(_template_table_rows(template_rows), "refusal-template-table"),
         _html_heading(
@@ -199,9 +204,19 @@ def _interactive_appendix_block(summary_path: Path, pair_summary_path: Path) -> 
     ])
 
 
+def results_block() -> str:
+    if os.environ["PSTL_DOC_TARGET"] == "html":
+        return _interactive_tables_block(SUMMARY, PAIR_SUMMARY)
+    return "\n".join([
+        "Full refusal-pole audit table: "
+        "[out/model_matrix/refusal_probe_seed24_n1_model_matrix_summary.md]"
+        "(out/model_matrix/refusal_probe_seed24_n1_model_matrix_summary.md)."
+    ])
+
+
 def appendix_block() -> str:
     if os.environ["PSTL_DOC_TARGET"] == "html":
-        return _interactive_appendix_block(SUMMARY, PAIR_SUMMARY)
+        return _appendix_intro()
     return _appendix_block(SUMMARY)
 
 
