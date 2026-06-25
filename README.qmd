@@ -200,10 +200,9 @@ This library samples from or was shaped by:
 
 ## Appendix: Choosing Scenario Suffixes
 
-The pilot table above varies the *persona template* and holds the scenario
-roughly fixed. This appendix does the orthogonal sweep: hold the persona pair
-fixed and vary the *scenario prompt*, to find which prompts let a persona pair
-separate at all. Same script, pointed at a JSONL of scenarios:
+Use this to test whether your scenario prompts are good for steering. Hold the
+persona pair fixed, vary the scenario prompt, and keep scenarios that make the
+two poles separate without obvious leakage.
 
 ```sh
 uv run python scripts/validate_persona_axes_openrouter.py \
@@ -211,89 +210,19 @@ uv run python scripts/validate_persona_axes_openrouter.py \
   --n 4 --seed 24
 ```
 
-The scenarios here are third-person-observer vignettes ("You see an actor do X;
-what does the actor do next / which concern matters most?"). They carry their own
-question and length directive, so each row is flagged `"self_contained": true` and
-the script's `_generation_prompt` leaves them verbatim instead of appending its
-default first-person "What do you do? Answer in 80-140 words." (which would impose
-a second question and flip the POV). Bare-vignette families without the flag keep
-the default question unchanged.
+- Use diverse scenarios first, then select the ones that separate on your model.
+- Choose scenarios that elicit the behavior your steering axis is meant to move.
+  Some axes are about doing, some about judging, some about explaining, some
+  about refusing, some about moral tradeoffs, and some about multi-turn behavior.
+- Match the point of view to the axis. First person, second person, third-person
+  observer, and "what should the actor do?" prompts can produce different
+  failure modes.
+- Watch for refusal collapse. In one first-person acting test, both poles refused
+  in the same way, so the persona contrast disappeared.
 
-> Source: [wassname/w2schar-mini](https://github.com/wassname/w2schar-mini).
-> Separate measurement, not comparable to the seed-24 pilot table above:
-> generator `qwen/qwen3.5-27b`, judge `google/gemini-3.1-flash-lite-preview`,
-> `n=4` scenarios from `data/scenarios_w2s_character_3p.jsonl` (tiny-mfv /
-> Clifford-2015 vignettes). `axis_delta` is the blind-A/B separation (0-10), best
-> template per axis. A qualitative signal, not a score.
-
-The pilot notes "the subtle axis still mostly fails." This sharpens which axes
-fail and why: it is an axis-by-prompt-POV interaction, not just template quality.
-We measured 27 character axes (from the Forethought AI-character essay, Appendix 2,
-and a character-inspirations doc) against the 3p-observer prompts.
-
-Concrete action/disposition axes separate cleanly:
-
-| axis | axis_delta |
-|---|---:|
-| `avoid_power_under_uncertainty` | 8.00 |
-| `honest_when_uncomfortable` | 8.00 |
-| `long_term_flourishing` | 7.50 |
-| `society_over_user_interest` | 7.25 |
-| `notice_externalities` | 6.50 |
-| `fairness_integrity` | 6.00 |
-| `autonomy_coercion` | 5.75 |
-| `verbose_terse` | 5.25 |
-| `whistleblow_not_complicit` | 5.00 |
-| `refuse_power_grab` | 3.75 |
-| `caution_on_irreversible` | 3.50 |
-| `future_self_endorses` | 3.25 |
-| `genuine_care_not_paternalist` | 3.00 |
-| `action_over_talk` | 3.00 |
-
-Abstract how/signaling/discernment axes flatline through every `{persona}`
-template:
-
-| axis | axis_delta |
-|---|---:|
-| `sanctity_individual_utilitarian` | 2.67 |
-| `calibrated_not_overconfident` | 2.00 |
-| `deescalate_not_escalate` | 1.50 |
-| `flag_escalation_risk` | 1.50 |
-| `encourage_value_reflection` | 1.50 |
-| `discern_act_or_restrain` | 0.75 |
-| `perspective_taking` | 0.75 |
-| `serves_deeper_goal` | 0.50 |
-| `pushback_not_sycophancy` | 0.33 |
-| `self_knowledge_wisdom` | 0.25 |
-| `weigh_who_is_affected` | 0.00 |
-| `principle_not_signaling` | 0.00 |
-| `respect_operator_autonomy` | 0.00 |
-
-The mechanism is pole-generability, compounded by POV. A 3p-observer prompt asks
-what another actor does, which offers no act-vs-signal fork, and the model will
-not role-play performative non-action. So a neg pole defined as "signals the
-principle without acting" produces text the judge cannot separate from the pos
-pole. The fix is to define the neg pole as a concrete disposition the model will
-actually generate:
-
-- `principle_not_signaling` (neg "signals the principle without acting") -> axis_delta 0.0
-- `action_over_talk` (neg "voices concern / notes it for the record without acting") -> axis_delta 3.0
-
-Same idea, but the second neg is a behaviour, not an abstraction.
-
-We then tested the obvious next hypothesis: that these abstract axes need
-first-person/acting prompts (an explicit act-vs-signal fork) rather than a 3p
-observer. It is wrong, and informatively so. Re-measuring the flatlined axes on
-six first-person prompts ("You are an AI; your operator asks you to do X;
-respond") made separation worse: refusal/character-break rate ran 0.83-1.00 and
-`axis_delta` fell across the board (`honest_when_uncomfortable` 8.0 -> 1.3,
-`action_over_talk` 3.0 -> 0.3). The poles show why: a first-person request to
-comply with a bad order triggers the model's refusal reflex on both poles
-identically ("I cannot manipulate the ranking..."), which floods out the persona
-contrast. The ego-free 3p observer was better precisely because it does not
-invite that refusal. So the residual is likely genuine-tradeoff scenarios (no
-clear villain, both options defensible, the difference is in how the actor
-reasons), judged on reasoning depth rather than action, not a change of POV.
+The practical test is simple: run the scenario sweep, inspect which scenarios
+give large A/B separation without obvious leakage, and keep those for your
+steering eval.
 
 Data: `data/persona_pairs_w2s_character.jsonl` (27 axis defs),
 `data/scenarios_w2s_character_3p.jsonl` (52 prompts).
