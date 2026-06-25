@@ -5,39 +5,58 @@ description: "Use this repo to choose, validate, and export persona templates an
 
 # Persona Template Library
 
-Use this skill when working inside this repo on persona-template selection,
-persona-pair selection, OpenRouter validation runs, or dataset export.
+Use this skill when working inside this repo to choose persona templates, write
+mirrored persona pairs, validate scenario suffixes on OpenRouter, or export the
+dataset.
 
 ## Canonical Files
 
-- `docs/choosing_personas.md`: workflow for choosing personas and templates.
+- `README.qmd`: single source for README.md and GitHub Pages.
+- `README.md`: quick-start workflow, headline results, and plot for readers.
+- `docs/choosing_personas.md`: workflow for writing mirrored persona pairs.
 - `docs/persona_prompt_prior_art.md`: annotated prior art for persona prompt
   shapes used by steering repos and papers.
 - `data/template_catalog.yaml`: reusable template inventory.
 - `data/persona_pairs_pilot_two.jsonl`: measured pilot persona pairs.
 - `data/persona_pairs_v2_candidates.jsonl`: candidate persona pairs.
+- `data/scenarios_*.jsonl`: candidate scenario suffixes to validate on the
+  target model.
 - `out/stats/`: local generated stats and examples; ignored by git, so do not
   assume these exist in a clean checkout.
 - `scripts/validate_persona_axes_openrouter.py`: live and dry-run validator.
 - `scripts/export_persona_template_stats.py`: converts validator artifacts into
   examples and score tables.
+- `scripts/summarize_model_matrix.py`: summarizes latest model-matrix logs for
+  the README/Pages render.
 - `scripts/build_hf_dataset.py`: builds the Hugging Face splits, including
   `main`, `template_pair_cells`, `persona_pairs`, `examples`, and `controls`.
 
 ## Workflow
 
-1. Read `docs/choosing_personas.md`.
-2. Read `docs/persona_prompt_prior_art.md` when choosing new persona pairs or
-   template shapes from prior work.
-3. If the global `persona-steering` skill is available, read it too; it has the
-   longer literature notes, curation rules, and worked examples behind this
-   repo's shorter guide.
-4. Choose candidate persona pairs by mirror-testing them: each positive clause
-   needs a negative counterpart that only flips the intended pole.
-5. Choose candidate templates that bind the persona to behavior, judgment, or
-   perspective rather than pure identity.
-6. Run a dry-run validator command before live OpenRouter calls.
-7. After a live run, export stats and inspect examples before trusting scores.
+Use the repo in this order:
+
+1. Choose persona templates from the `README.md` Results Snapshot table, the
+   Hugging Face `main` split, or `data/template_catalog.yaml`.
+2. Choose persona pairs with `docs/choosing_personas.md`. Mirror-test each pair:
+   every positive clause needs a negative counterpart that only flips the
+   intended pole.
+3. Choose scenario suffixes by validating them on the target model with
+   `scripts/validate_persona_axes_openrouter.py`. Keep suffixes that elicit the
+   behavior mode you need: doing, judging, explaining, refusing, moral tradeoffs,
+   or multi-turn behavior.
+4. Run a dry-run validator command before live OpenRouter calls.
+5. After a live run, export stats and inspect examples before trusting scores.
+
+Read `docs/persona_prompt_prior_art.md` when choosing new persona pairs or
+template shapes from prior work. If the global `persona-steering` skill is
+available, read it for longer curation rules and worked examples.
+
+For report edits, edit `README.qmd` and render both outputs:
+
+```sh
+just readme
+just pages
+```
 
 The steering arithmetic matters: a direction is the average positive-minus-
 negative difference. Any systematic length, refusal, formality, confidence,
@@ -87,5 +106,6 @@ uv run python scripts/export_persona_template_stats.py \
 Refresh README tables:
 
 ```sh
-just results-table
+just readme
+just pages
 ```

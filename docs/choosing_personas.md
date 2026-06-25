@@ -160,10 +160,12 @@ uv run python scripts/export_persona_template_stats.py \
   --out-prefix out/stats/v2_pilot_seed24
 ```
 
-Refresh the README table when the committed stats change.
+Refresh the rendered README and GitHub Pages site when the committed stats
+change.
 
 ```sh
-just results-table
+just readme
+just pages
 ```
 
 ## Accept Or Drop
