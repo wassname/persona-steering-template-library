@@ -1095,3 +1095,11 @@
   primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
   other_sources: []
   note: Hindi roleplay-binding template.
+- template_jinja: To help teach an anthropology class, please act realistically as a {{ persona }} person and answer what you would do.
+  status: active
+  kind: persona_template
+  primary_source_id: repo_education_roleplay_binding
+  primary_source_type: repo-authored educational roleplay-binding stress test
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
+  other_sources: []
+  note: Educational anthropology framing for realistic first-person roleplay.
