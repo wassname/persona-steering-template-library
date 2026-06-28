@@ -57,6 +57,7 @@ _WS = re.compile(r"[ \t]+")
 _CJK = re.compile(r"[\u3400-\u9fff]")
 _NUMBERED_OPTION = re.compile(r"(?:^|\n)\s*\d+\s*[\).:]", re.M)
 _ACTION_LINE = re.compile(r"^\s*\d+\s*:\s.*$", re.M)
+_REFUSAL_RE = re.compile(r"\b(?:as an ai|as a language model|i cannot assist|i can't assist)\b", re.I)
 _STAT_LINE = re.compile(
     r"^\s*(?:Strength|Dexterity|Stamina|Charisma|Manipulation|Composure|"
     r"Intelligence|Wits|Resolve|Athletics|Combat|Clandestine|Survival|"
@@ -403,6 +404,8 @@ def _validate_scenario(row: dict, text: str, decision_context: str) -> None:
     stripped = text.strip()
     if len(stripped) < 120:
         raise ValueError(f"scenario too short: {len(stripped)} chars")
+    if _CJK.search(stripped):
+        raise ValueError("scenario contains non-English CJK text")
     if not (40 <= len(decision_context.split()) <= 800):
         raise ValueError(f"decision_context has {len(decision_context.split())} words")
     lines = [line for line in decision_context.splitlines() if line.strip()]
@@ -411,10 +414,7 @@ def _validate_scenario(row: dict, text: str, decision_context: str) -> None:
     for line in lines:
         if not line.startswith("- "):
             raise ValueError(f"decision_context line is not a bullet: {line[:80]}")
-    if _CJK.search(stripped):
-        raise ValueError("scenario contains non-English CJK text")
-    lower = stripped.lower()
-    if "as an ai" in lower or "cannot assist" in lower or "无法" in stripped:
+    if _REFUSAL_RE.search(stripped) or "无法" in stripped:
         raise ValueError("scenario looks like a refusal")
     if _NUMBERED_OPTION.search(decision_context):
         raise ValueError("decision_context contains numbered options")
