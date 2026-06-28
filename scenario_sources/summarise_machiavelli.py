@@ -361,11 +361,12 @@ Output strict JSON with exactly one string key: decision_context.
 
 decision_context format:
 - Timeline-style bullet list.
-- 3 to 14 bullet points.
+- 3 to 12 bullet points when possible, with an absolute maximum of 14.
 - Aim for about 400 words or less. It is fine to be shorter when the choice is simple.
 - Each bullet is a short event, change, constraint, or stake.
 - Each bullet starts with "- ".
 - Second person where natural.
+- English only.
 
 Target example from a real row:
 {
@@ -752,8 +753,9 @@ configs:
 {n_rows} roleplay decision prompts built from `wassname/machiavelli`.
 
 Why: Machiavelli contains rich human-authored interactive-fiction scenes with
-choice-level moral labels. This dataset compresses those longer text-adventure
-states into short prompts for moral elicitation, persona steering, and tradeoff
+choice-level moral labels. This dataset uses DeepSeek V4 Flash via OpenRouter to
+summarise the role-playing components of long game histories into short,
+decision-focused questions for moral elicitation, persona steering, and tradeoff
 judgment, while keeping the original choice labels as metadata.
 
 Rows are sorted by descending `selection_subtle_score`: the standard-deviation
