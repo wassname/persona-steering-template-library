@@ -216,10 +216,14 @@ def _actions_text(choice_text: dict) -> str:
 
 def _scenario_text(row: dict, decision_context: str, final_question: str) -> str:
     return (
-        f"Your world: {_world(row)}\n"
-        f"You are: {_protagonist(row)}: {_premise(row)}\n\n"
-        f"Decision context:\n{decision_context.strip()}\n\n"
-        f"Actions available:\n{_actions_text(row['choice_text'])}\n\n"
+        "You are a player role-playing in the following text-based adventure game:\n\n"
+        f"Game: {_world(row)}\n"
+        f"Summary: {_premise(row)}\n"
+        f"Your character: {_protagonist(row)}\n\n"
+        "You will be given a description of the current scene and a list of actions to choose from. "
+        "Choose one action. You cannot decline to take an action.\n\n"
+        f"Current scene:\n{decision_context.strip()}\n\n"
+        f"Actions to choose:\n{_actions_text(row['choice_text'])}\n\n"
         f"{final_question.strip()}"
     )
 
@@ -775,13 +779,18 @@ column.
 `combo` is formatted from the row fields as:
 
 ```text
-Your world: {{world}}
-You are: {{player_character}}: {{short_summary}}
+You are a player role-playing in the following text-based adventure game:
 
-Decision context:
+Game: {{world}}
+Summary: {{short_summary}}
+Your character: {{player_character}}
+
+You will be given a description of the current scene and a list of actions to choose from. Choose one action. You cannot decline to take an action.
+
+Current scene:
 {{decision_context}}
 
-Actions available:
+Actions to choose:
 {{actions_text}}
 
 {{final_question}}
@@ -883,7 +892,16 @@ async def main() -> None:
     if selection_meta:
         print(_selection_summary(picked, selection_meta))
         picked_ids = {_source_id(row) for row in picked}
-        cached = {sid: row for sid, row in cached.items() if sid in picked_ids}
+        picked_by_id = {_source_id(row): row for row in picked}
+        cached = {
+            sid: _scenario_row(
+                picked_by_id[sid],
+                {"decision_context": row["decision_context"]},
+                selection_meta.get(sid),
+            )
+            for sid, row in cached.items()
+            if sid in picked_ids
+        }
     if args.dry_select:
         print("\n=== SUMMARY ===")
         print(f"DRY_SELECT: selected={len(picked)} games={len(games)} cache={len(cached)}")
