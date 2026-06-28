@@ -255,7 +255,10 @@ def load_daily_dilemmas(limit: int | None = None) -> list[dict]:
     for did, rows in by_dilemma.items():
         values = []
         for r in rows:
-            values += ast.literal_eval(r["values_aggregated"])
+            try:
+                values += ast.literal_eval(r["values_aggregated"])
+            except (SyntaxError, ValueError):
+                continue
         axes = _dd_axes(values)
         if len(axes) < 2:
             continue
@@ -329,7 +332,7 @@ def _sc_frame(situation: str) -> str:
 
 
 def load_social_chem(limit: int | None = None) -> list[dict]:
-    ds = load_dataset("wassname/social_chemistry_101", split="train")
+    ds = load_dataset("wassname/social_chemistry_101", split="train", streaming=True)
     out, seen = [], set()
     for i, r in enumerate(ds):
         if r.get("area") not in _SC_KEEP_AREAS:
@@ -418,7 +421,10 @@ def load_ethics_qna(limit: int | None = None, split: str = "train") -> list[dict
     ds = load_dataset("wassname/ethics_qna_preferences", "commonsense", streaming=True)[split]
     out: list[dict] = []
     for idx, row in enumerate(ds):
-        body = row["prompt"].split("Post:\n", 1)[1].rsplit("Verdict:", 1)[0].strip().strip('"').strip()
+        prompt = row["prompt"]
+        if "Post:\n" not in prompt or "Verdict:" not in prompt:
+            continue
+        body = prompt.split("Post:\n", 1)[1].rsplit("Verdict:", 1)[0].strip().strip('"').strip()
         text = _eq_scenario(body)
         if text is None:
             continue
@@ -434,7 +440,7 @@ def load_ethics_qna(limit: int | None = None, split: str = "train") -> list[dict
 # ===================================================================== machiavelli
 # wassname/machiavelli: text-game decision points. Raw obs is ~350 words and split
 # across context columns, so it needs a per-row LLM compressor -- done OFFLINE by
-# scripts/summarise_machiavelli.py (deepseek-v4-flash) and COMMITTED to the cache
+# scenario_sources/summarise_machiavelli.py (deepseek-v4-flash) and COMMITTED to the cache
 # jsonl, so this loader is rules-only and the build stays deterministic. Run that
 # script to grow the cache; this just reads it.
 import json as _json
