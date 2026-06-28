@@ -733,13 +733,21 @@ class OpenRouter:
                 bad_path = path.with_suffix(f".bad-{int(time.time())}.json")
                 path.rename(bad_path)
                 logger.warning(f"quarantined malformed cached JSON judge output: {bad_path}")
-        attempts = JSON_RETRIES if json_schema is not None else 1
+        attempts = JSON_RETRIES
         last_content = ""
         last_error: Exception | None = None
         for attempt in range(1, attempts + 1):
             async with self.sem:
                 resp = await self.client.chat.completions.create(
                     **payload, extra_body=extra_body)
+            # OpenRouter returns an error body with choices=None on a provider
+            # error / content filter / rate limit; treat as a retryable failure
+            # instead of crashing the whole screen on `resp.choices[0]`.
+            if not getattr(resp, "choices", None):
+                last_error = RuntimeError(f"empty response (no choices): {getattr(resp, 'error', resp)!r}")
+                if attempt < attempts:
+                    await asyncio.sleep(min(30.0, 2.0 * attempt))
+                continue
             message = resp.choices[0].message
             content = message.content or ""
             last_content = content
@@ -752,6 +760,8 @@ class OpenRouter:
                         f"malformed JSON judge output attempt {attempt}/{attempts} "
                         f"cache_tag={cache_tag}: {content[:160]!r}"
                     )
+                    if attempt < attempts:
+                        await asyncio.sleep(min(30.0, 2.0 * attempt))
                     continue
             path.write_text(json.dumps({
                 "created_at": time.time(),
