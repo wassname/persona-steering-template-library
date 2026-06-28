@@ -506,9 +506,18 @@ def _read_cache() -> dict[str, dict[str, Any]]:
     return rows
 
 
+def _moral_sort_key(row: dict[str, Any]) -> tuple[float, float, str, str]:
+    return (
+        -float(row.get("selection_subtle_score", -1e9)),
+        -float(row.get("selection_score", -1e9)),
+        str(row.get("game_id", "")),
+        str(row.get("row_i", "")),
+    )
+
+
 def _write_cache(rows: dict[str, dict[str, Any]]) -> None:
     CACHE.parent.mkdir(parents=True, exist_ok=True)
-    ordered = sorted(rows.values(), key=lambda r: (r.get("game_id", ""), str(r.get("row_i", ""))))
+    ordered = sorted(rows.values(), key=_moral_sort_key)
     CACHE.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in ordered) + "\n")
 
 
@@ -589,6 +598,18 @@ def _moral_contrast_top_percent_rows(
             picked.append(row)
             meta[sid] = score
     return picked, meta
+
+
+def _sort_by_selection(rows: list[dict[str, Any]], meta: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        rows,
+        key=lambda row: (
+            -float(meta[_source_id(row)]["subtle_score"]),
+            -float(meta[_source_id(row)]["score"]),
+            row["f"],
+            str(row["row_i"]),
+        ),
+    )
 
 
 def _selection_summary(rows: list[dict[str, Any]], meta: dict[str, dict[str, Any]]) -> str:
@@ -692,6 +713,16 @@ def _write_parquet(path: Path, rows: list[dict[str, Any]]) -> None:
     pq.write_table(table, path)
 
 
+def _hf_size_category(n_rows: int) -> str:
+    if n_rows < 1_000:
+        return "n<1K"
+    if n_rows < 10_000:
+        return "1K<n<10K"
+    if n_rows < 100_000:
+        return "10K<n<100K"
+    return "100K<n<1M"
+
+
 def _hf_readme(n_rows: int) -> str:
     return f"""---
 license: mit
@@ -708,7 +739,7 @@ tags:
 - ai-safety
 - synthetic
 size_categories:
-- n<1K
+- {_hf_size_category(n_rows)}
 configs:
 - config_name: default
   data_files:
@@ -720,15 +751,39 @@ configs:
 
 {n_rows} roleplay decision prompts built from `wassname/machiavelli`.
 
-Rows are selected for high choice-level spread on social/moral labels such as
-fairness, deception, manipulation, promises, and spying, while penalising rows
-where the contrast is mostly power, killing, or physical harm.
+Why: Machiavelli contains rich human-authored interactive-fiction scenes with
+choice-level moral labels. This dataset compresses those longer text-adventure
+states into short prompts for moral elicitation, persona steering, and tradeoff
+judgment, while keeping the original choice labels as metadata.
+
+Rows are sorted by descending `selection_subtle_score`: the standard-deviation
+spread of non-crude social/moral labels across available choices, such as
+fairness, deception, manipulation, promises, and spying. `selection_score`
+penalises rows where the contrast is mostly power, killing, or physical harm.
 
 `combo` is the ready-to-use prompt. The same content is split into editable
 fields: `world`, `player_character`, `short_summary`, generated
 `decision_context`, `choice_text`, and `final_question`. Only the long
 history/current-situation text is summarised; the short source fields and choices
 stay separate so users can change the question or prompt format.
+
+`text` duplicates `combo` for compatibility with tooling that expects a `text`
+column.
+
+`combo` is formatted from the row fields as:
+
+```text
+Your world: {{world}}
+You are: {{player_character}}: {{short_summary}}
+
+Decision context:
+{{decision_context}}
+
+Actions available:
+{{actions_text}}
+
+{{final_question}}
+```
 
 Labels are metadata copied from the source dataset, not ground-truth answers.
 The prompts are for eliciting persona-conditioned roleplay, preference, judgment,
@@ -783,6 +838,8 @@ async def main() -> None:
     ap.add_argument("--hf-repo", default=HF_REPO)
     ap.add_argument("--hf-out", type=Path, default=Path("/tmp/machiavelli-character-scenarios-hf"))
     args = ap.parse_args()
+    if args.selection == "moral-contrast-top-percent" and args.all:
+        args.top_game_frac = 1.0
 
     print("\n=== CONFIG ===")
     print(f"argv: {' '.join(sys.argv)}")
@@ -812,9 +869,8 @@ async def main() -> None:
     cached = _read_cache()
     selection_meta: dict[str, dict[str, Any]] = {}
     if args.selection == "moral-contrast-top-percent":
-        if args.all:
-            raise ValueError("--selection moral-contrast-top-percent expects --top-game-frac, not --all")
         picked, selection_meta = _moral_contrast_top_percent_rows(args.top_game_frac, args.seed)
+        picked = _sort_by_selection(picked, selection_meta)
         usable = picked
     else:
         usable = _usable_rows(pool_size)
@@ -901,7 +957,7 @@ async def main() -> None:
     if args.upload_hf:
         if args.all and missing:
             raise RuntimeError(f"refusing to upload incomplete full cache: missing={missing}")
-        rows = [out[_source_id(row)] for row in picked if _source_id(row) in out]
+        rows = sorted([out[_source_id(row)] for row in picked if _source_id(row) in out], key=_moral_sort_key)
         _upload_hf(rows, args.hf_repo, args.hf_out)
 
 
