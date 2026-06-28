@@ -740,6 +740,12 @@ class OpenRouter:
             async with self.sem:
                 resp = await self.client.chat.completions.create(
                     **payload, extra_body=extra_body)
+            # OpenRouter returns an error body with choices=None on a provider
+            # error / content filter / rate limit; treat as a retryable failure
+            # instead of crashing the whole screen on `resp.choices[0]`.
+            if not getattr(resp, "choices", None):
+                last_error = RuntimeError(f"empty response (no choices): {getattr(resp, 'error', resp)!r}")
+                continue
             message = resp.choices[0].message
             content = message.content or ""
             last_content = content
