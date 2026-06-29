@@ -10,9 +10,16 @@ already lives at `scripts/validate_persona_axes_openrouter.py`.
   tested live in w2schar-mini; emit prompts-not-completions, affordance-filtered,
   length-capped. `LOADERS` dict maps name -> loader.
 - `summarise_machiavelli.py` -- offline deepseek-v4-flash compressor, round-robin
-  across games, robust to empty API responses, writes `data/machiavelli_summaries.jsonl`.
-- `data/machiavelli_summaries.jsonl` -- 13 seed summaries across 11 games (proof
-  of shape; the full ~83k is the stretch task below).
+  across games, robust to bad API responses, writes
+  `scenario_sources/data/machiavelli_summaries.jsonl`.
+- `scenario_sources/data/machiavelli_summaries.jsonl` -- 10,492 schema-15
+  moral-contrast summaries across 92 games.
+- Published HF dataset:
+  [`wassname/machiavelli_character_scenarios`](https://huggingface.co/datasets/wassname/machiavelli_character_scenarios).
+  It keeps one ready-to-use prompt in `text`, no duplicate `combo` column, and
+  separate editable fields/source labels. It is a curated subset of
+  [`wassname/machiavelli`](https://huggingface.co/datasets/wassname/machiavelli),
+  not a raw mirror.
 - Patch to `scripts/validate_persona_axes_openrouter.py`: guard `resp.choices is
   None` (OpenRouter error bodies) so one bad API response can't abort the screen.
 - `README.md` -- the affordance contract, the load->screen->keep workflow, per-source
@@ -22,13 +29,9 @@ already lives at `scripts/validate_persona_axes_openrouter.py`.
 1. **Run the screen end-to-end** and commit a per-source clean-rate table + a few
    kept/culled examples into the README (the w2schar run aborted on the choices=None
    bug now patched; re-run with an instruct generator or qwen-with-raised-max_tokens).
-2. **Fold the existing** `data/scenarios_v2_candidates.jsonl` and
-   `data/scenarios_w2s_character_3p.jsonl` into the same schema so there is ONE
-   scenario home.
-3. **machiavelli HF dataset**: summarise all 83,389 usable rows (resumable via the
-   cache, ~$15-30), preserve per-choice morality labels + agg_power + game id +
-   row_i, publish as a HF dataset; downstream draws a game-balanced capped sample.
-4. **A combined screened `character_scenarios` HF dataset** from all sources.
+2. **Fold the existing** root scenario JSONL files into one `data/scenarios/`
+   home with the same prompt-row schema.
+3. **A combined screened `character_scenarios` HF dataset** from all sources.
 
 ## 2026-06-28 Machiavelli moral-contrast selection update
 
@@ -72,13 +75,18 @@ Next plan:
    `top_by_game`, `top1000_round_robin`, and `random_5pct`.
 2. Build an HF-ready dataset from `top1000_round_robin`.
 3. Keep `obs_history_summary` separate from the choice fields.
-4. Put a `combo` column first, containing the assembled scenario text:
-   world/player/short summary, obs/history summary, and action choices.
+4. Put a `text` column first, containing the assembled scenario prompt:
+   world/player/short summary, decision context, and action choices.
 5. Upload only after manual QC of a few random rows at each step.
 6. Dataset card should be short and say: source is `wassname/machiavelli`, rows
    are selected for high choice-level moral-label spread across games, labels are
-   metadata from the source, `combo` is convenience text, and users can assemble
-   their own prompt from the separate columns.
+   metadata from the source, and users can assemble their own prompt from the
+   separate columns.
+
+Status on 2026-06-29: complete. HF revision
+`ce23c42ffe0fa3ac2501a7faea07a16bb2405fca` verified fresh with 10,492 rows,
+schema version 15, 92 games, sorted by `selection_subtle_score`, and no `combo`
+column.
 
 ## Provenance
 See w2schar-mini commits 993e12d / d3fc5cb / 917ccba and

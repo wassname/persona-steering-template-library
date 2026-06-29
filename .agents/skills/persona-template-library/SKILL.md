@@ -16,10 +16,10 @@ dataset.
 - `docs/choosing_personas.md`: workflow for writing mirrored persona pairs.
 - `docs/persona_prompt_prior_art.md`: annotated prior art for persona prompt
   shapes used by steering repos and papers.
-- `data/template_catalog.yaml`: reusable template inventory.
-- `data/persona_pairs_pilot_two.jsonl`: measured pilot persona pairs.
-- `data/persona_pairs_v2_candidates.jsonl`: candidate persona pairs.
-- `data/scenarios_*.jsonl`: candidate scenario suffixes to validate on the
+- `data/templates/template_catalog.yaml`: reusable template inventory.
+- `data/personas/persona_pairs_pilot_two.jsonl`: measured pilot persona pairs.
+- `data/personas/persona_pairs_v2_candidates.jsonl`: candidate persona pairs.
+- `data/scenarios/scenarios_*.jsonl`: candidate scenario suffixes to validate on the
   target model.
 - `out/stats/`: local generated stats and examples; ignored by git, so do not
   assume these exist in a clean checkout.
@@ -36,7 +36,7 @@ dataset.
 Use the repo in this order:
 
 1. Choose persona templates from the `README.md` Results Snapshot table, the
-   Hugging Face `main` split, or `data/template_catalog.yaml`.
+   Hugging Face `main` split, or `data/templates/template_catalog.yaml`.
 2. Choose persona pairs with `docs/choosing_personas.md`. Mirror-test each pair:
    every positive clause needs a negative counterpart that only flips the
    intended pole.
@@ -74,9 +74,9 @@ Dry-run validation:
 
 ```sh
 uv run python scripts/validate_persona_axes_openrouter.py \
-  --axes data/persona_pairs_pilot_two.jsonl \
-  --templates data/template_catalog.yaml \
-  --family data/scenarios_v2_candidates.jsonl \
+  --axes data/personas/persona_pairs_pilot_two.jsonl \
+  --templates data/templates/template_catalog.yaml \
+  --family data/scenarios/scenarios_v2_candidates.jsonl \
   --n 1 \
   --seed 24 \
   --dry-run \
@@ -87,9 +87,9 @@ Live validation:
 
 ```sh
 OPENROUTER_API_KEY=... uv run python scripts/validate_persona_axes_openrouter.py \
-  --axes data/persona_pairs_pilot_two.jsonl \
-  --templates data/template_catalog.yaml \
-  --family data/scenarios_v2_candidates.jsonl \
+  --axes data/personas/persona_pairs_pilot_two.jsonl \
+  --templates data/templates/template_catalog.yaml \
+  --family data/scenarios/scenarios_v2_candidates.jsonl \
   --n 2 \
   --seed 24 \
   --out out/persona_template_library_v2_pilot_seed24.json

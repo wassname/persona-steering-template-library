@@ -3,7 +3,7 @@
 This page keeps the useful part of the older notes: what existing steering
 systems actually used for persona wording. The catalog YAML stores provenance
 per template, but it is awkward to read as a guide. Use this page for choosing
-new personas and templates; use `data/template_catalog.yaml` for exact inventory.
+new personas and templates; use `data/templates/template_catalog.yaml` for exact inventory.
 
 Evidence strength is uneven. Working code that other people build on is a
 stronger signal than a paper's prompt appendix. The safety-research repos are

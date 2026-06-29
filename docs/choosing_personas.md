@@ -13,9 +13,9 @@ style, length, refusal posture, and task mode as matched as possible.
 ## What To Use
 
 - `README.md`: headline results and the current plot.
-- `data/template_catalog.yaml`: canonical reusable templates.
-- `data/persona_pairs_pilot_two.jsonl`: measured pilot pairs.
-- `data/persona_pairs_v2_candidates.jsonl`: candidate pairs not necessarily in
+- `data/templates/template_catalog.yaml`: canonical reusable templates.
+- `data/personas/persona_pairs_pilot_two.jsonl`: measured pilot pairs.
+- `data/personas/persona_pairs_v2_candidates.jsonl`: candidate pairs not necessarily in
   the headline run.
 - `docs/persona_prompt_prior_art.md`: annotated examples of what existing
   steering repos and papers used.
@@ -131,9 +131,9 @@ OpenRouter calls.
 
 ```sh
 uv run python scripts/validate_persona_axes_openrouter.py \
-  --axes data/persona_pairs_pilot_two.jsonl \
-  --templates data/template_catalog.yaml \
-  --family data/scenarios_v2_candidates.jsonl \
+  --axes data/personas/persona_pairs_pilot_two.jsonl \
+  --templates data/templates/template_catalog.yaml \
+  --family data/scenarios/scenarios_v2_candidates.jsonl \
   --n 1 \
   --seed 24 \
   --dry-run \
@@ -144,9 +144,9 @@ Then run a small live validation.
 
 ```sh
 OPENROUTER_API_KEY=... uv run python scripts/validate_persona_axes_openrouter.py \
-  --axes data/persona_pairs_pilot_two.jsonl \
-  --templates data/template_catalog.yaml \
-  --family data/scenarios_v2_candidates.jsonl \
+  --axes data/personas/persona_pairs_pilot_two.jsonl \
+  --templates data/templates/template_catalog.yaml \
+  --family data/scenarios/scenarios_v2_candidates.jsonl \
   --n 2 \
   --seed 24 \
   --out out/persona_template_library_v2_pilot_seed24.json

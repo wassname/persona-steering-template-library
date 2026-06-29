@@ -11,9 +11,9 @@ This is stricter than scripts/validate_persona_pool.py:
 
 Usage:
   OPENROUTER_API_KEY=... uv run python scripts/validate_persona_axes_openrouter.py \\
-    --axes data/persona_pairs_pilot_two.jsonl \\
-    --templates data/template_catalog.yaml \\
-    --n 3 --family data/scenarios_v2_candidates.jsonl --out out/persona_axes_direct.json
+    --axes data/personas/persona_pairs_pilot_two.jsonl \\
+    --templates data/templates/template_catalog.yaml \\
+    --n 3 --family data/scenarios/scenarios_v2_candidates.jsonl --out out/persona_axes_direct.json
 
 Dry-run without network:
   uv run python scripts/validate_persona_axes_openrouter.py --dry-run --n 1
@@ -491,7 +491,7 @@ def _select_axes(axis_arg: str) -> list[Axis]:
 
 def _select_templates(arg: str) -> tuple[str, ...]:
     if arg == "default":
-        arg = str(ROOT / "data/template_catalog.yaml")
+        arg = str(ROOT / "data/templates/template_catalog.yaml")
     if arg == "skill":
         return (VERBATIM_TEMPLATE,)
     if arg == "controls":
@@ -1425,9 +1425,9 @@ def main() -> None:
     ap.add_argument("--family", default="character",
                     help="comma-separated scenario families; default avoids sycophancy")
     ap.add_argument("--n", type=int, default=6, help="number of scenario prompts")
-    ap.add_argument("--axes", default=str(ROOT / "data/persona_pairs_pilot_two.jsonl"),
+    ap.add_argument("--axes", default=str(ROOT / "data/personas/persona_pairs_pilot_two.jsonl"),
                     help="persona-pair JSONL path")
-    ap.add_argument("--templates", default=str(ROOT / "data/template_catalog.yaml"),
+    ap.add_argument("--templates", default=str(ROOT / "data/templates/template_catalog.yaml"),
                     help="'skill', 'controls', catalog path, text file path, or templates separated by ||")
     ap.add_argument("--seed", type=int, default=13)
     ap.add_argument("--max-word-delta-frac", type=float, default=0.0,

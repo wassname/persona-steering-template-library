@@ -9,8 +9,9 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
+TEMPLATE_DATA = DATA / "templates"
 OUT = ROOT / "out"
-CATALOG_PATH = DATA / "template_catalog.yaml"
+CATALOG_PATH = TEMPLATE_DATA / "template_catalog.yaml"
 CATALOG_JSONL_PATH = OUT / "catalog/template_catalog.jsonl"
 TEMPLATES_TXT_PATH = OUT / "catalog/templates_v2_candidates.txt"
 TEMPLATE_SOURCES_PATH = OUT / "catalog/template_sources.jsonl"

@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 NORMAL_STATS = docs_results.NORMAL_TEMPLATE_PAIR_STATS
 ENGINEERED_STATS = docs_results.ENGINEERED_TEMPLATE_PAIR_STATS
 CONTROL_STATS = docs_results.CONTROL_TEMPLATE_PAIR_STATS
-ENGINEERED_PAIRS = ROOT / "data/persona_pairs_engineered_baseline_pilot_two.jsonl"
+ENGINEERED_PAIRS = ROOT / "data/personas/persona_pairs_engineered_baseline_pilot_two.jsonl"
 ENGINEERED_DISPLAY = "`{engineered long persona prefix}`*"
 
 def _read_jsonl(path: Path) -> list[dict]:

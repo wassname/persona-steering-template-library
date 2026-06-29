@@ -1,8 +1,8 @@
 """Build the Hugging Face dataset folder with parquet-only data files.
 
 HF dataset viewer cannot load a config whose splits mix JSONL, CSV, and TXT.
-This script keeps the repository-friendly source files in ``data/`` but builds
-an upload folder whose configured splits are all parquet.
+This script keeps the repository-friendly source files under ``data/`` but
+builds an upload folder whose configured splits are all parquet.
 """
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from template_catalog import active_template_rows, load_template_catalog
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
+PERSONA_DATA = DATA / "personas"
 STATS = ROOT / "out/stats"
 
 
@@ -66,7 +67,7 @@ SOURCE_INFO = {
     },
     "persona_steering_skill": {
         "type": "repo-authored distillate, not an independent citation",
-        "url": "https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml",
+        "url": "https://github.com/wassname/persona-steering-template-library/blob/main/data/templates/template_catalog.yaml",
     },
     "steer_heal_love": {
         "type": "wassname anecdote / design note",
@@ -78,7 +79,7 @@ SOURCE_INFO = {
     },
     "wassname_v2_candidate": {
         "type": "repo-authored local candidate",
-        "url": "https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml",
+        "url": "https://github.com/wassname/persona-steering-template-library/blob/main/data/templates/template_catalog.yaml",
     },
     "antipasto3": {
         "type": "wassname associated code / template file",
@@ -199,7 +200,7 @@ def _v2_error_counts() -> dict[tuple[str, str], int]:
 
 
 def _persona_pairs_by_id() -> dict[str, dict[str, Any]]:
-    return {row["id"]: row for row in _read_jsonl(DATA / "persona_pairs_pilot_two.jsonl")}
+    return {row["id"]: row for row in _read_jsonl(PERSONA_DATA / "persona_pairs_pilot_two.jsonl")}
 
 
 def _template_pair_score_rows() -> list[dict[str, Any]]:
@@ -320,7 +321,7 @@ def _template_score_rows(template_pair_scores: list[dict[str, Any]]) -> list[dic
 
 
 def _persona_pair_review_rows(template_pair_scores: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    pairs = _read_jsonl(DATA / "persona_pairs_pilot_two.jsonl")
+    pairs = _read_jsonl(PERSONA_DATA / "persona_pairs_pilot_two.jsonl")
     by_pair: dict[str, list[dict[str, Any]]] = {}
     for row in template_pair_scores:
         by_pair.setdefault(row["persona_pair"], []).append(row)
@@ -434,7 +435,7 @@ I am collecting reusable templates here, not large engineered suffix prompts. Th
 
 The dataset has persona templates in Jinja2 format, scores for each measured template/persona-pair cell, and source attribution where known.
 
-Important: this is a provenance inventory, not a full lit review. See `data/template_catalog.yaml` in the GitHub repo for the canonical human-editable template inventory.
+Important: this is a provenance inventory, not a full lit review. See `data/templates/template_catalog.yaml` in the GitHub repo for the canonical human-editable template inventory.
 
 Persona-pair provenance is marked as `source`, `source_type`, and `source_url`. Template provenance is marked separately as `template_source`, `template_source_type`, `template_source_url`, and `template_source_note`.
 
@@ -472,7 +473,7 @@ Sources are marked as `source`, `source_type`, and `source_url`.
 
 Do not read every `source_id` as an independent citation. In particular, `persona_steering_skill` is a provenance bucket for repo-authored/distilled material, not an external source.
 
-Generated stats and runtime catalog files live under `out/`. `data/template_catalog.yaml` is the template source of truth.
+Generated stats and runtime catalog files live under `out/`. `data/templates/template_catalog.yaml` is the template source of truth.
 
 Readable prior-art guide: https://github.com/wassname/persona-steering-template-library/blob/main/docs/persona_prompt_prior_art.md
 

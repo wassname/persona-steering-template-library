@@ -13,7 +13,7 @@ Use this repo to choose the prompt parts for persona steering:
 
 | choice | use |
 |----|----|
-| persona templates | Start with the top Results table, the Hugging Face `main` split, or [`data/template_catalog.yaml`](data/template_catalog.yaml). |
+| persona templates | Start with the top Results table, the Hugging Face `main` split, or [`data/templates/template_catalog.yaml`](data/templates/template_catalog.yaml). |
 | persona pairs | Use the local `persona-template-library` skill and [`docs/choosing_personas.md`](docs/choosing_personas.md) to write mirrored positive/negative poles. |
 | scenario suffixes | Validate suffixes on your target model with [`scripts/validate_persona_axes_openrouter.py`](scripts/validate_persona_axes_openrouter.py). |
 
@@ -76,7 +76,7 @@ Caption: each point is one measured template on the normal-scenario
 pilot set. Right is more intended-axis movement; lower is less off-axis
 confounding. Color is `score t`, the score mean divided by standard
 error. The full template inventory is
-[`data/template_catalog.yaml`](data/template_catalog.yaml).
+[`data/templates/template_catalog.yaml`](data/templates/template_catalog.yaml).
 
 ![plot](./out/on_off_axis.png)
 
@@ -139,8 +139,8 @@ headline score.
 Provenance:
 
 The authoritative template inventory is
-[`data/template_catalog.yaml`](data/template_catalog.yaml). The readable
-prior-art guide is
+[`data/templates/template_catalog.yaml`](data/templates/template_catalog.yaml).
+The readable prior-art guide is
 [`docs/persona_prompt_prior_art.md`](docs/persona_prompt_prior_art.md).
 
 Off-axis confounds considered:
@@ -185,7 +185,7 @@ This library samples from or was shaped by:
 - annotated guide:
   [`docs/persona_prompt_prior_art.md`](docs/persona_prompt_prior_art.md)
 - full inventory:
-  [`data/template_catalog.yaml`](data/template_catalog.yaml)
+  [`data/templates/template_catalog.yaml`](data/templates/template_catalog.yaml)
 
 ## Citation
 
@@ -208,7 +208,7 @@ scenarios that make the two poles separate without obvious leakage.
 
 ``` sh
 uv run python scripts/validate_persona_axes_openrouter.py \
-  --family data/scenarios_w2s_character_3p.jsonl \
+  --family data/scenarios/scenarios_w2s_character_3p.jsonl \
   --n 4 --seed 24
 ```
 
@@ -228,8 +228,8 @@ The practical test is simple: run the scenario sweep, inspect which
 scenarios give large A/B separation without obvious leakage, and keep
 those for your steering eval.
 
-Data: `data/persona_pairs_w2s_character.jsonl` (27 axis defs),
-`data/scenarios_w2s_character_3p.jsonl` (52 prompts).
+Data: `data/personas/persona_pairs_w2s_character.jsonl` (27 axis defs),
+`data/scenarios/scenarios_w2s_character_3p.jsonl` (52 prompts).
 
 ## Appendix: Baselines
 

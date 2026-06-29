@@ -47,22 +47,30 @@ values axis -- which is why scenarios must be screened, not just loaded.
 | kellycyy/daily_dilemmas | `load_daily_dilemmas` | 3p judgment | ~1258, 92.5%; low leak |
 | wassname/social_chemistry_101 | `load_social_chem` | 3p judgment | ~46k after a tension filter; dedup in-loader; low leak for steering |
 | wassname/ethics_qna_preferences | `load_ethics_qna` | 3p judgment | commonsense config only; NOISIEST -- over-includes low-tension one-liners, screen is essential |
-| wassname/machiavelli | `load_machiavelli` | AI-seat | needs a per-row LLM compressor; summarised offline (see below) |
+| wassname/machiavelli | `load_machiavelli` | role-playing choice | published moral-contrast subset; summarised offline (see below) |
 
 Skipped: `Zihao1/Moral-RolePlay` (fiction with named novel characters -> role-play
 refusal confound + eval-leak; recasting costs as much as authoring fresh).
 
 ## machiavelli
-Raw `obs` is ~350 words across context columns -- too long. `summarise_machiavelli.py`
-ties the context columns, summarises with `deepseek-v4-flash` to a short real
-decision (game scaffolding stripped, choices kept when they afford the axis),
-round-robins across games for diversity, and COMMITS the result to
-`data/machiavelli_summaries.jsonl` so loads are deterministic and free. The loader
-just reads the cache. Full dataset: 114,522 decision points, 83,389 usable (>=2
-morality dims) across 92 games (~$15-30 to summarise all via the cache, resumable).
+Raw `obs` plus history columns are too long for short persona-scenario prompts.
+`summarise_machiavelli.py` loads [`wassname/machiavelli`](https://huggingface.co/datasets/wassname/machiavelli),
+selects rows with high choice-level moral-label spread, and uses DeepSeek V4 Flash
+via OpenRouter to compress the role-playing history into a short decision-focused
+prompt. The committed cache is `scenario_sources/data/machiavelli_summaries.jsonl`,
+so `load_machiavelli` is deterministic and free after generation.
 
-## HF dataset (suggested next step)
-Publish the full screened machiavelli set as a HF dataset (e.g.
-`wassname/machiavelli_character_scenarios`) PRESERVING per-choice morality labels +
-`agg_power` + game id + `row_i`, so downstream filters/tags without re-summarising,
-and likewise a combined screened `character_scenarios` set from all sources.
+The published dataset is
+[`wassname/machiavelli_character_scenarios`](https://huggingface.co/datasets/wassname/machiavelli_character_scenarios):
+10,492 schema-15 rows across 92 games, sorted by descending
+`selection_subtle_score`. It is not a mirror of the full 114,522 source rows. It
+keeps the moral-contrast subset after filtering for enough moral-axis variation,
+removing setup-only choices, and deduping repeated choice sets. Each row has a
+ready-to-use prompt in `text` and no duplicate `combo` column. It also preserves
+editable fields such as `world`,
+`player_character`, `decision_context`, `actions_text`, `choice_labels`, and the
+selection scores.
+
+## Next steps
+- Screen the non-Machiavelli scenario JSONL files with the same scenario gym.
+- Publish a combined screened `character_scenarios` HF dataset from all sources.
