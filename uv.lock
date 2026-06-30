@@ -11,7 +11,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-06-24T06:49:17.483578221Z"
+exclude-newer = "2026-06-24T07:52:11.097954957Z"
 exclude-newer-span = "P6D"
 
 [[package]]
@@ -1654,7 +1654,7 @@ wheels = [
 [[package]]
 name = "openrouter-wrapper"
 version = "0.1.0"
-source = { git = "https://github.com/wassname/openrouter_wrapper#816e2d0dc2e6e620d5e4ab9f105217d17efd971e" }
+source = { git = "https://github.com/wassname/openrouter_wrapper#01190c8c5c3f1c9aca9c312b8aff289099286679" }
 dependencies = [
     { name = "httpx" },
     { name = "loguru" },
