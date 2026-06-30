@@ -1,8 +1,8 @@
-"""Prepare a staged Authority-axis selection run.
+"""Prepare staged pure-Authority template and scenario validation.
 
-Stage A is small enough to compare persona pairs and templates. Stage B keeps
-the winning pair/template fixed and scores a larger scenario pool before
-steering-lite trains on the kept rows.
+The Authority persona pair is fixed by construct. Stage A compares templates.
+Stage B keeps the same pair and the chosen template fixed, then scores a larger
+scenario pool before steering-lite trains on the kept rows.
 """
 from __future__ import annotations
 
@@ -27,19 +27,15 @@ AUTHORITY_AXIS_WEIGHTS = {
 
 AUTHORITY_TEXT_RE = re.compile(
     r"\b("
-    r"authorit\w*|hierarch\w*|rank|senior|obedien\w*|duty|duties|"
-    r"chain of command|rule|rules|law|legal|protocol|procedure|tradition\w*|"
+    r"authorit\w*|rank|senior|duty|duties|"
+    r"chain of command|rule|rules|law|legal|protocol|procedure|"
     r"command|order|superior|institution\w*|principal|king|queen|captain|"
     r"officer|manager|boss|policy|regulat\w*"
     r")\b",
     re.I,
 )
 
-DEFAULT_AXIS_IDS = (
-    "authority_only",
-    "authority_role_duty",
-    "authority_tradition_obedience",
-)
+PURE_AUTHORITY_PAIR_ID = "pure_authority"
 
 # Ten high-scoring templates from the existing library tables that are plausible
 # with phrase-style personas. The validator decides which one survives on the
@@ -88,13 +84,17 @@ def assert_templates_in_catalog(templates: tuple[str, ...]) -> None:
         raise ValueError(f"template(s) not in catalog: {missing}")
 
 
-def select_axes(path: Path, axis_ids: tuple[str, ...]) -> list[dict]:
+def select_pure_authority_pair(path: Path) -> list[dict]:
     rows = read_jsonl(path)
     by_id = {row["id"]: row for row in rows}
-    missing = [axis_id for axis_id in axis_ids if axis_id not in by_id]
-    if missing:
-        raise ValueError(f"missing axis ids in {path}: {missing}")
-    return [by_id[axis_id] for axis_id in axis_ids]
+    pair = by_id[PURE_AUTHORITY_PAIR_ID]
+    if pair["pos"] != "authority-respecting" or pair["neg"] != "authority-disregarding":
+        raise ValueError(f"{PURE_AUTHORITY_PAIR_ID} changed: {pair}")
+    blocked = re.compile(r"dignity|tradition|obedien|social norm|care|wellbeing", re.I)
+    joined = json.dumps(pair, ensure_ascii=False)
+    if blocked.search(joined):
+        raise ValueError(f"{PURE_AUTHORITY_PAIR_ID} contains proxy wording: {pair}")
+    return [pair]
 
 
 def normalize_scenario(row: dict, path: Path) -> dict:
@@ -143,31 +143,18 @@ def source_counts(rows: list[dict]) -> list[dict]:
     return [{"source": source, "n": counts[source]} for source in sorted(counts)]
 
 
-def parse_axis_ids(raw: str) -> tuple[str, ...]:
-    axis_ids = tuple(axis_id.strip() for axis_id in raw.split(",") if axis_id.strip())
-    if not axis_ids:
-        raise ValueError("--axis-ids selected zero axes")
-    return axis_ids
-
-
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out-dir", type=Path, default=ROOT / "out/authority_selection")
+    ap.add_argument("--out-dir", type=Path, default=ROOT / "out/pure_authority_20260630")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--stage-a-per-source", type=int, default=2)
     ap.add_argument("--stage-b-per-source", type=int, default=30)
-    ap.add_argument(
-        "--axis-ids",
-        type=parse_axis_ids,
-        default=DEFAULT_AXIS_IDS,
-        help="comma-separated persona axis ids from persona_pairs_v2_candidates.jsonl",
-    )
     args = ap.parse_args()
 
     assert_templates_in_catalog(TEMPLATES)
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
-    axes = select_axes(ROOT / "data/personas/persona_pairs_v2_candidates.jsonl", args.axis_ids)
+    axes = select_pure_authority_pair(ROOT / "data/personas/persona_pairs_v2_candidates.jsonl")
     stage_a_scenarios = build_scenarios(args.stage_a_per_source, args.seed)
     stage_b_scenarios = build_scenarios(args.stage_b_per_source, args.seed)
 
@@ -178,7 +165,7 @@ def main() -> None:
 
     manifest = {
         "seed": args.seed,
-        "axis_ids": list(args.axis_ids),
+        "pair_id": PURE_AUTHORITY_PAIR_ID,
         "templates": list(TEMPLATES),
         "stage_a": {
             "per_source": args.stage_a_per_source,
