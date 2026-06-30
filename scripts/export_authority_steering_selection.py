@@ -63,11 +63,21 @@ def write_stage_b_inputs(stage_a_path: Path, out_dir: Path, axis_filter: str | N
     return winner
 
 
-def select_stage_b(stage_b_path: Path, out_dir: Path, keep_per_source: int) -> list[dict]:
+def select_stage_b(
+    stage_b_path: Path,
+    out_dir: Path,
+    keep_per_source: int,
+    strict_only: bool,
+    min_score: float,
+) -> list[dict]:
     artifact = json.loads(stage_b_path.read_text())
     grouped: dict[str, list[dict]] = defaultdict(list)
     for row in artifact["results"]:
         if "error" in row:
+            continue
+        if strict_only and not row["strict_pass"]:
+            continue
+        if score_row(row) < min_score:
             continue
         grouped[str(row["source"])].append(row)
 
@@ -137,6 +147,8 @@ def main() -> None:
     ap.add_argument("--out-dir", type=Path, default=ROOT / "out/authority_selection")
     ap.add_argument("--keep-per-source", type=int, default=10)
     ap.add_argument("--axis-filter", type=str)
+    ap.add_argument("--strict-only", action="store_true")
+    ap.add_argument("--min-score", type=float, default=0.0)
     args = ap.parse_args()
 
     if args.stage_a is None and args.stage_b is None:
@@ -148,7 +160,7 @@ def main() -> None:
         print(tabulate([winner], headers="keys", tablefmt="github", floatfmt=".3f"))
 
     if args.stage_b is not None:
-        selected = select_stage_b(args.stage_b, args.out_dir, args.keep_per_source)
+        selected = select_stage_b(args.stage_b, args.out_dir, args.keep_per_source, args.strict_only, args.min_score)
         counts: dict[str, int] = {}
         for row in selected:
             counts[row["source"]] = counts.get(row["source"], 0) + 1
