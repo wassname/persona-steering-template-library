@@ -680,11 +680,10 @@ confound, not the average."""
 
 
 class OpenRouter:
-    def __init__(self, cache_dir: Path, concurrency: int, provider_order: tuple[str, ...]):
+    def __init__(self, cache_dir: Path, concurrency: int):
         self.cache_dir = cache_dir
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.sem = asyncio.Semaphore(concurrency)
-        self.provider_order = provider_order
 
     async def chat_jsonish(
         self,
@@ -696,6 +695,7 @@ class OpenRouter:
         cache_tag: str,
         seed: int,
         json_schema: dict | None,
+        provider_only: tuple[str, ...] = (),
     ) -> str:
         payload = {
             "model": _model_name(model),
@@ -712,8 +712,8 @@ class OpenRouter:
         }
         if json_schema is not None:
             payload["response_format"] = json_schema
-        if self.provider_order:
-            payload["provider"] = {"order": list(self.provider_order)}
+        if provider_only:
+            payload["provider"] = {"only": list(provider_only), "allow_fallbacks": False}
         key = f"{cache_tag}_{_hkey({'payload': payload, 'extra_body': extra_body})}.json"
         path = self.cache_dir / key
         if path.exists():
@@ -829,6 +829,7 @@ async def _evaluate_one(
     seed: int,
     gen_temperature: float,
     max_word_delta_frac: float,
+    generator_provider_only: tuple[str, ...],
 ) -> dict:
     scenario = _scenario_text(row)
     pos_persona = _persona_text(axis, template, axis.pos_descriptor, "pos")
@@ -870,6 +871,7 @@ async def _evaluate_one(
                 cache_tag="gen_pos",
                 seed=seed,
                 json_schema=None,
+                provider_only=generator_provider_only,
             )
             neg_text = pos_text
         else:
@@ -882,6 +884,7 @@ async def _evaluate_one(
                     cache_tag="gen_pos",
                     seed=seed,
                     json_schema=None,
+                    provider_only=generator_provider_only,
                 ),
                 router.chat_jsonish(
                     model=generator_model,
@@ -891,6 +894,7 @@ async def _evaluate_one(
                     cache_tag="gen_neg",
                     seed=seed,
                     json_schema=None,
+                    provider_only=generator_provider_only,
                 ),
             )
         pos_text, neg_text = pos_text.strip(), neg_text.strip()
@@ -1252,8 +1256,8 @@ async def amain(args) -> None:
     )
     if not axis_judge_models:
         raise ValueError("--axis-judge-models selected zero models")
-    provider_order = tuple(
-        provider.strip() for provider in args.provider_order.split(",") if provider.strip()
+    generator_provider_only = tuple(
+        provider.strip() for provider in args.generator_provider_only.split(",") if provider.strip()
     )
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -1300,7 +1304,7 @@ async def amain(args) -> None:
             "style_judge_model": args.judge_model,
             "gen_temperature": args.gen_temperature,
             "judge_temperature": 0.0,
-            "provider_order": list(provider_order),
+            "generator_provider_only": list(generator_provider_only),
             "seed": args.seed,
             "max_word_delta_frac": args.max_word_delta_frac,
             "n_prompts": len(rows),
@@ -1319,7 +1323,7 @@ async def amain(args) -> None:
         logger.error("OPENROUTER_API_KEY not set")
         sys.exit(1)
 
-    router = OpenRouter(Path(args.cache_dir), args.concurrency, provider_order)
+    router = OpenRouter(Path(args.cache_dir), args.concurrency)
     tasks = []
     for row_i, row in enumerate(rows, start=1):
         for axis in axes:
@@ -1336,13 +1340,14 @@ async def amain(args) -> None:
                     seed=args.seed,
                     gen_temperature=args.gen_temperature,
                     max_word_delta_frac=args.max_word_delta_frac,
+                    generator_provider_only=generator_provider_only,
                 ))
     logger.info(
         f"{len(rows)} prompts × {len(axes)} axes × {len(templates)} templates "
         f"= {len(tasks)} pairs; generator={args.generator_model}; "
         f"axis_judges={','.join(axis_judge_models)}; style_judge={args.judge_model}; "
         f"gen_temperature={args.gen_temperature}; judge_temperature=0.0; "
-        f"provider_order={','.join(provider_order) or 'OpenRouter default'}"
+        f"generator_provider_only={','.join(generator_provider_only) or 'OpenRouter default'}"
     )
     tasks = [asyncio.create_task(task) for task in tasks]
     results = []
@@ -1358,7 +1363,7 @@ async def amain(args) -> None:
             "gen_temperature": args.gen_temperature,
             "judge_temperature": 0.0,
             "family": args.family,
-            "provider_order": list(provider_order),
+            "generator_provider_only": list(generator_provider_only),
             "seed": args.seed,
             "max_word_delta_frac": args.max_word_delta_frac,
             "n_prompts": len(rows),
@@ -1383,7 +1388,7 @@ async def amain(args) -> None:
         "gen_temperature": args.gen_temperature,
         "judge_temperature": 0.0,
         "family": args.family,
-        "provider_order": list(provider_order),
+        "generator_provider_only": list(generator_provider_only),
         "seed": args.seed,
         "max_word_delta_frac": args.max_word_delta_frac,
         "n_prompts": len(rows),
@@ -1431,8 +1436,8 @@ def main() -> None:
     ap.add_argument("--max-word-delta-frac", type=float, default=0.0,
                     help="optional hard length gate; 0 means report-only")
     ap.add_argument("--concurrency", type=int, default=16)
-    ap.add_argument("--provider-order", default="DeepInfra",
-                    help="comma-separated OpenRouter provider preference order; empty uses OpenRouter default")
+    ap.add_argument("--generator-provider-only", default="Alibaba",
+                    help="comma-separated OpenRouter providers allowed for generator calls; empty uses OpenRouter default")
     ap.add_argument("--cache-dir", default="out/cache/persona_axes_openrouter")
     ap.add_argument("--out", default="out/persona_axes_openrouter.json")
     ap.add_argument("--dry-run", action="store_true",
