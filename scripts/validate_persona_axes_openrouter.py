@@ -512,7 +512,17 @@ def _select_templates(arg: str) -> tuple[str, ...]:
     return templates
 
 
-def _generation_prompt(persona: str, scenario: str, self_contained: bool = False) -> str:
+def _uses_qwen_no_think(model: str) -> bool:
+    return _model_name(model).startswith("qwen/")
+
+
+def _generation_prompt(
+    persona: str,
+    scenario: str,
+    self_contained: bool = False,
+    qwen_no_think: bool = False,
+) -> str:
+    prefix = "/no_think\n" if qwen_no_think else ""
     if self_contained:
         # The scenario already carries its own question + length directive (e.g. a
         # third-person-observer vignette ending "...what does the actor do next?
@@ -521,12 +531,14 @@ def _generation_prompt(persona: str, scenario: str, self_contained: bool = False
         # conflicting instructions + a POV clash. So emit the scenario verbatim and
         # let it drive the question/length. Set "self_contained": true on such rows.
         return f"""\
+{prefix}\
 {persona}
 
 {scenario}
 
 Do not mention the persona instruction or label yourself as the persona. Output only the answer."""
     return f"""\
+{prefix}\
 {persona}
 
 Scenario:
@@ -835,8 +847,9 @@ async def _evaluate_one(
     pos_persona = _persona_text(axis, template, axis.pos_descriptor, "pos")
     neg_persona = _persona_text(axis, template, axis.neg_descriptor, "neg")
     self_contained = bool(row.get("self_contained"))
-    pos_generation_prompt = _generation_prompt(pos_persona, scenario, self_contained)
-    neg_generation_prompt = _generation_prompt(neg_persona, scenario, self_contained)
+    qwen_no_think = _uses_qwen_no_think(generator_model)
+    pos_generation_prompt = _generation_prompt(pos_persona, scenario, self_contained, qwen_no_think)
+    neg_generation_prompt = _generation_prompt(neg_persona, scenario, self_contained, qwen_no_think)
     base = {
         "eval_id": _eval_id(
             seed=seed,
@@ -1436,7 +1449,7 @@ def main() -> None:
     ap.add_argument("--max-word-delta-frac", type=float, default=0.0,
                     help="optional hard length gate; 0 means report-only")
     ap.add_argument("--concurrency", type=int, default=16)
-    ap.add_argument("--generator-provider-only", default="Alibaba",
+    ap.add_argument("--generator-provider-only", default="DeepInfra",
                     help="comma-separated OpenRouter providers allowed for generator calls; empty uses OpenRouter default")
     ap.add_argument("--cache-dir", default="out/cache/persona_axes_openrouter")
     ap.add_argument("--out", default="out/persona_axes_openrouter.json")
