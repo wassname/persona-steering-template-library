@@ -25,17 +25,56 @@ AUTHORITY_AXIS_WEIGHTS = {
     "instruction_following": 3,
 }
 
-AUTHORITY_TEXT_RE = re.compile(
+ROLE_AUTHORITY_TEXT_RE = re.compile(
     r"\b("
-    r"authorit\w*|rank|senior|duty|duties|"
-    r"chain of command|rule|rules|law|legal|protocol|procedure|"
-    r"command|order|superior|institution\w*|principal|king|queen|captain|"
-    r"officer|manager|boss|policy|regulat\w*"
+    r"boss|manager|supervisor|senior management|principal|teacher|"
+    r"captain|commander|commanding officer|general|superior|chain of command|"
+    r"command|guild master"
     r")\b",
     re.I,
 )
 
+GENERIC_AUTHORITY_TEXT_RE = re.compile(r"\b(authorit\w*|duty|duties|rank)\b", re.I)
+
+AUTHORITY_CONFOUND_TEXT_RE = re.compile(
+    r"\b("
+    r"law|legal|police|official|government|regulat\w*|policy|policies|"
+    r"rule|rules|social order|tradition\w*|conform|obedien\w*|"
+    r"children|parents|elders|league|trespass|closed due to safety"
+    r")\b",
+    re.I,
+)
+
+DIRECT_SURVEY_TEXT_RE = re.compile(
+    r"^Give your direct answer to this value question\b|"
+    r"\bShould I (respect authority|stick to the rules|try to follow the rules)\b|"
+    r"\bShould all children learn respect for authority\b",
+    re.I,
+)
+
 PURE_AUTHORITY_PAIR_ID = "pure_authority"
+AUTHORITY_SOURCE_STEMS = {
+    "scenarios_daily_dilemmas",
+    "scenarios_moral_stories",
+    "scenarios_social_chem",
+    "scenarios_w2s_character_3p",
+}
+NON_ROLE_AUTHORITY_TEXT_RE = re.compile(r"\b(video game boss|fighting the boss)\b", re.I)
+MUNDANE_AUTHORITY_CONFOUND_RE = re.compile(
+    r"\b("
+    r"abuse|accident\w*|audit|blackmail|bomb|bug|bully\w*|cancer|combat|"
+    r"complain\w*|complaint|crime|criminal|"
+    r"critical|danger\w*|deadly|death|deactivat\w*|defense|disclos\w*|emergency|"
+    r"expose workers|"
+    r"ethnic|false|fishy|flirt\w*|fraud|genocide|harass\w*|harm|hatred|hide|hospital|"
+    r"humiliat\w*|insult\w*|kill\w*|law|legal|"
+    r"life support|medical|meth|military|pathogen|patient|plague|police|private|risk|safety|"
+    r"security|shady|spy\w*|steal\w*|stole|stolen|suppress\w*|threat|tracking|"
+    r"traumatic|triage|violence|weapon|"
+    r"whistleblower"
+    r")\b",
+    re.I,
+)
 
 # Ten catalog templates that render cleanly with adjective-style personas such
 # as "authority-respecting" and "authority-disregarding". Avoid article forms
@@ -117,12 +156,20 @@ def normalize_scenario(row: dict, path: Path) -> dict:
 
 def authority_affordance_score(text: str, axes: list[str]) -> int:
     axis_score = sum(AUTHORITY_AXIS_WEIGHTS.get(str(axis).lower(), 0) for axis in axes)
-    text_score = min(6, len(AUTHORITY_TEXT_RE.findall(text)))
-    return axis_score + text_score
+    role_score = min(12, 3 * len(ROLE_AUTHORITY_TEXT_RE.findall(text)))
+    generic_score = min(2, len(GENERIC_AUTHORITY_TEXT_RE.findall(text)))
+    confound_penalty = 4 * len(AUTHORITY_CONFOUND_TEXT_RE.findall(text))
+    survey_penalty = 16 if DIRECT_SURVEY_TEXT_RE.search(text) else 0
+    return axis_score + role_score + generic_score - confound_penalty - survey_penalty
 
 
 def select_from_source(path: Path, n: int, seed: int) -> list[dict]:
-    rows = [normalize_scenario(row, path) for row in read_jsonl(path)]
+    rows = [
+        row for row in (normalize_scenario(row, path) for row in read_jsonl(path))
+        if row["authority_affordance_score"] > 0 and ROLE_AUTHORITY_TEXT_RE.search(row["prompt"])
+        and not NON_ROLE_AUTHORITY_TEXT_RE.search(row["prompt"])
+        and not MUNDANE_AUTHORITY_CONFOUND_RE.search(row["prompt"])
+    ]
     rng = random.Random(f"{seed}:{path.stem}")
     keyed = [(rng.random(), row) for row in rows]
     keyed.sort(key=lambda item: (-item[1]["authority_affordance_score"], item[0]))
@@ -132,6 +179,8 @@ def select_from_source(path: Path, n: int, seed: int) -> list[dict]:
 def build_scenarios(per_source: int, seed: int) -> list[dict]:
     out: list[dict] = []
     for path in sorted((ROOT / "data/scenarios").glob("scenarios_*.jsonl")):
+        if path.stem not in AUTHORITY_SOURCE_STEMS:
+            continue
         out.extend(select_from_source(path, per_source, seed))
     return out
 
