@@ -1,4 +1,4 @@
-"""Load public moral-decision datasets as scenario prompt rows.
+"""Load public value and moral-decision datasets as scenario prompt rows.
 
 Each loader returns dictionaries with `text`, `axes`, `source`, and `source_id`.
 `export_scenarios.py` writes these rows to `data/scenarios/`; the validator then
@@ -7,8 +7,13 @@ screens those files before they are used for persona-conditioned generations.
 from __future__ import annotations
 
 import ast
+import csv
 import hashlib
+import io
+import json
 import re
+import urllib.request
+from pathlib import Path
 
 from datasets import load_dataset
 
@@ -388,16 +393,125 @@ def load_ethics_qna(limit: int | None = None, split: str = "train") -> list[dict
     return out
 
 
-import json as _json
-from pathlib import Path as _Path
+def _url_text(url: str) -> str:
+    with urllib.request.urlopen(url, timeout=60) as response:
+        return response.read().decode("utf-8")
 
-_MACH_CACHE = _Path(__file__).resolve().parent / "data" / "machiavelli_summaries.jsonl"
+
+def _slug(s: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", s.lower()).strip("_")
+
+
+def _caps(limit: int | None, n: int) -> list[int | None]:
+    if limit is None:
+        return [None] * n
+    base, remainder = divmod(limit, n)
+    return [base + int(i < remainder) for i in range(n)]
+
+
+_SYCO_FILES = ("answer", "are_you_sure", "feedback")
+
+
+def _sycophancy_conversation(messages: list[dict]) -> str:
+    turns = []
+    for message in messages:
+        role = {"human": "Human", "ai": "Assistant"}[message["type"]]
+        turns.append(f"{role}: {message['content'].strip()}")
+    return (
+        "Continue this conversation. Output only the next assistant response.\n\n"
+        + "\n\n".join(turns)
+    )
+
+
+def load_sycophancy_eval(limit: int | None = None) -> list[dict]:
+    out: list[dict] = []
+    for name, cap in zip(_SYCO_FILES, _caps(limit, len(_SYCO_FILES)), strict=True):
+        url = f"https://raw.githubusercontent.com/meg-tong/sycophancy-eval/main/datasets/{name}.jsonl"
+        for i, line in enumerate(_url_text(url).splitlines()):
+            if cap is not None and i >= cap:
+                break
+            row = json.loads(line)
+            out.append({
+                "text": _sycophancy_conversation(row["prompt"]),
+                "axes": ["honesty", "sycophancy"],
+                "source": "sycophancy_eval",
+                "source_id": f"sycophancy_eval_{name}_{i}",
+            })
+            if limit is not None and len(out) >= limit:
+                return out
+    return out
+
+
+_GENIES_AGENTIC = {
+    "survival_influence": ["self_preservation", "user_values"],
+    "relinquish_power": ["power_seeking", "corrigibility"],
+    "pursue_goals": ["goal_pursuit", "constraints"],
+    "reward_seeking": ["reward_seeking", "instruction_following"],
+}
+_GENIES_SYCOPHANCY = {
+    "sycophancy_answer": ["honesty", "sycophancy"],
+    "sycophancy_are_you_sure": ["honesty", "sycophancy"],
+    "sycophancy_feedback": ["honesty", "sycophancy"],
+    "sycophancy_mimicry": ["honesty", "sycophancy"],
+}
+
+
+def _genies_rows(config_axes: dict[str, list[str]], source: str, limit: int | None) -> list[dict]:
+    out: list[dict] = []
+    for (config, axes), cap in zip(config_axes.items(), _caps(limit, len(config_axes)), strict=True):
+        ds = load_dataset("wassname/genies_preferences", config, split="train", streaming=True)
+        for i, row in enumerate(ds):
+            if cap is not None and i >= cap:
+                break
+            out.append({
+                "text": (
+                    "Complete the following interaction. Output only the assistant response.\n\n"
+                    + row["prompt"].strip()
+                ),
+                "axes": axes,
+                "source": source,
+                "source_id": f"{source}_{config}_{i}",
+            })
+            if limit is not None and len(out) >= limit:
+                return out
+    return out
+
+
+def load_genies_agentic(limit: int | None = None) -> list[dict]:
+    return _genies_rows(_GENIES_AGENTIC, "genies_agentic", limit)
+
+
+def load_genies_sycophancy(limit: int | None = None) -> list[dict]:
+    return _genies_rows(_GENIES_SYCOPHANCY, "genies_sycophancy", limit)
+
+
+def load_valuebench(limit: int | None = None) -> list[dict]:
+    url = "https://raw.githubusercontent.com/ValueByte-AI/ValueBench/main/data/value_orientation.csv"
+    rows = csv.DictReader(io.StringIO(_url_text(url)))
+    out: list[dict] = []
+    for i, row in enumerate(rows):
+        value = row["value"].strip()
+        out.append({
+            "text": (
+                "Give your direct answer to this value question in 2-4 sentences, with your reason. "
+                f"{row['question'].strip()}"
+            ),
+            "axes": ["value_orientation", _slug(value)],
+            "source": "valuebench",
+            "source_id": f"valuebench_{row['questionnaire']}_{i}",
+        })
+        if limit is not None and len(out) >= limit:
+            break
+    return out
+
+
+_MACH_CACHE = Path(__file__).resolve().parent / "data" / "machiavelli_summaries.jsonl"
 
 
 def load_machiavelli(limit: int | None = None) -> list[dict]:
     if not _MACH_CACHE.exists():
         return []
-    rows = [_json.loads(l) for l in _MACH_CACHE.read_text().splitlines() if l.strip()]
+    rows = [json.loads(l) for l in _MACH_CACHE.read_text().splitlines() if l.strip()]
     return rows[:limit] if limit else rows
 
 
@@ -408,4 +522,8 @@ LOADERS = {
     "social_chem": load_social_chem,
     "ethics_qna": load_ethics_qna,
     "machiavelli": load_machiavelli,
+    "sycophancy_eval": load_sycophancy_eval,
+    "genies_agentic": load_genies_agentic,
+    "genies_sycophancy": load_genies_sycophancy,
+    "valuebench": load_valuebench,
 }

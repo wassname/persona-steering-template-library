@@ -1,7 +1,7 @@
 # scenario_sources
 
-This directory turns public moral-decision datasets into local scenario JSONL
-files for persona-steering experiments. Generated files live in
+This directory turns public value, sycophancy, and moral-decision datasets into
+local scenario JSONL files for persona-steering experiments. Generated files live in
 `data/scenarios/`; each row is a short prompt plus source fields (`text`,
 `axes`, `source`, `source_id`, `self_contained`) that can be passed to
 `scripts/validate_persona_axes_openrouter.py --family ...`. Machiavelli is the
