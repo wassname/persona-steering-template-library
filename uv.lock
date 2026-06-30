@@ -1654,7 +1654,7 @@ wheels = [
 [[package]]
 name = "openrouter-wrapper"
 version = "0.1.0"
-source = { git = "https://github.com/wassname/openrouter_wrapper#d011cd67ee32230d77aa66405149ed46f89aa19e" }
+source = { git = "https://github.com/wassname/openrouter_wrapper#816e2d0dc2e6e620d5e4ab9f105217d17efd971e" }
 dependencies = [
     { name = "httpx" },
     { name = "loguru" },
