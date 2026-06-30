@@ -5,6 +5,8 @@ __pycache__/
 .pi/
 out/
 docs/spec/
+docs/reviews/
+**/HANDOVER.md
 hf/
 parquet/
 *.parquet

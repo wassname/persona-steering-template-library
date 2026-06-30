@@ -21,6 +21,8 @@ dataset.
 - `data/personas/persona_pairs_v2_candidates.jsonl`: candidate persona pairs.
 - `data/scenarios/scenarios_*.jsonl`: candidate scenario suffixes to validate on the
   target model.
+- `scenario_sources/export_scenarios.py`: writes source loader outputs into
+  `data/scenarios/scenarios_<source>.jsonl`.
 - `out/stats/`: local generated stats and examples; ignored by git, so do not
   assume these exist in a clean checkout.
 - `scripts/validate_persona_axes_openrouter.py`: live and dry-run validator.
@@ -68,6 +70,12 @@ Catalog check:
 
 ```sh
 uv run python scripts/sync_template_library.py --check
+```
+
+Export scenarios from source loaders:
+
+```sh
+uv run python scenario_sources/export_scenarios.py --sources machiavelli
 ```
 
 Dry-run validation:
