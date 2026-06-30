@@ -1,9 +1,9 @@
-# Persona prompt prior art
+# Persona prompt literature review
 
-This page keeps the useful part of the older notes: what existing steering
-systems actually used for persona wording. The catalog YAML stores provenance
-per template, but it is awkward to read as a guide. Use this page for choosing
-new personas and templates; use `data/templates/template_catalog.yaml` for exact inventory.
+This page summarizes what existing steering systems actually used for persona
+wording. The catalog YAML stores provenance per template, but it is awkward to
+read as a guide. Use this page for choosing new personas and templates; use
+`data/templates/template_catalog.yaml` for the exact inventory.
 
 Evidence strength is uneven. Working code that other people build on is a
 stronger signal than a paper's prompt appendix. The safety-research repos are
@@ -177,7 +177,7 @@ helpfulness or refusal behavior.
 
 ## Practical rule
 
-Use prior art as prompt-shape evidence, not truth. A source tells us that some
+Use this review as prompt-shape evidence, not truth. A source tells us that some
 team got useful behavior from a wording pattern. It does not prove the template
 will steer your target model cleanly. Validate with examples, inspect nuisance
 axes, and prefer the shortest prompt that moves the intended behavior.

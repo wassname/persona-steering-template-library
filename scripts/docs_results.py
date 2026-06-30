@@ -8,19 +8,22 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-STATS = ROOT / "out/stats"
+STATS = ROOT / "data/results/stats"
+MODEL_MATRIX = ROOT / "data/results/model_matrix"
+DOCS_MODEL_MATRIX = ROOT / "docs/results/model_matrix"
 
 NORMAL_TEMPLATE_PAIR_STATS = STATS / "v2_pilot_seed24_template_pair_stats.jsonl"
 ENGINEERED_TEMPLATE_PAIR_STATS = STATS / "engineered_baseline_seed24_template_pair_stats.jsonl"
 CONTROL_TEMPLATE_PAIR_STATS = STATS / "control_baseline_seed24_template_pair_stats.jsonl"
 
 REFUSAL_MODEL_PAIR_STATS = [
-    ROOT / "out/model_matrix/stats/refusal_probe_seed24_n1_google_gemma-2-27b-it_template_pair_stats.jsonl",
-    ROOT / "out/model_matrix/stats/refusal_probe_seed24_n1_google_gemma-3-4b-it_template_pair_stats.jsonl",
-    ROOT / "out/model_matrix/stats/refusal_probe_seed24_n1_qwen_qwen3.6-flash_template_pair_stats.jsonl",
-    ROOT / "out/model_matrix/stats/refusal_probe_seed24_n1_ibm-granite_granite-4.1-8b_template_pair_stats.jsonl",
+    MODEL_MATRIX / "stats/refusal_probe_seed24_n1_google_gemma-2-27b-it_template_pair_stats.jsonl",
+    MODEL_MATRIX / "stats/refusal_probe_seed24_n1_google_gemma-3-4b-it_template_pair_stats.jsonl",
+    MODEL_MATRIX / "stats/refusal_probe_seed24_n1_qwen_qwen3.6-flash_template_pair_stats.jsonl",
+    MODEL_MATRIX / "stats/refusal_probe_seed24_n1_ibm-granite_granite-4.1-8b_template_pair_stats.jsonl",
 ]
-REFUSAL_MODEL_PREFIX = ROOT / "out/model_matrix/refusal_probe_seed24_n1"
+REFUSAL_MODEL_PREFIX = MODEL_MATRIX / "refusal_probe_seed24_n1"
+REFUSAL_MODEL_MARKDOWN = DOCS_MODEL_MATRIX / "refusal_probe_seed24_n1_model_matrix_summary.md"
 
 ANTHROPIC_IF2_COMMENT = "<!-- instruction following eval, Anthropic/if-2 -->"
 ANTHROPIC_IF2_LABEL = "Anthropic/if-2 instruction-following eval:"

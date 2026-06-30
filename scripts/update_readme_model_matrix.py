@@ -10,8 +10,8 @@ from tabulate import tabulate
 import docs_results
 
 ROOT = Path(__file__).resolve().parents[1]
-SUMMARY = ROOT / "out/model_matrix/refusal_probe_seed24_n1_template_model_summary.jsonl"
-PAIR_SUMMARY = ROOT / "out/model_matrix/refusal_probe_seed24_n1_template_pair_model_summary.jsonl"
+SUMMARY = ROOT / "data/results/model_matrix/refusal_probe_seed24_n1_template_model_summary.jsonl"
+PAIR_SUMMARY = ROOT / "data/results/model_matrix/refusal_probe_seed24_n1_template_pair_model_summary.jsonl"
 ANTHROPIC_IF2_SHORT_LABEL = "Anthropic IF-2: role-play as {persona}"
 
 
@@ -45,7 +45,7 @@ def _appendix_table(rows: list[dict]) -> str:
 
 def _appendix_intro() -> str:
     return "\n\n".join([
-        "## Appendix: Refusal-Pole Probe",
+        "## Appendix: refusal-pole probe",
         (
             "This is a rejected-pole slice: it keeps the template and suffix sweep "
             "unfiltered, then evaluates persona pairs whose negative/rejected pole is "
@@ -64,8 +64,8 @@ def _appendix_intro() -> str:
         ),
         (
             "The generated full audit table includes strict-pass, echo, and refusal columns: "
-            "[out/model_matrix/refusal_probe_seed24_n1_model_matrix_summary.md]"
-            "(out/model_matrix/refusal_probe_seed24_n1_model_matrix_summary.md)."
+            "[docs/results/model_matrix/refusal_probe_seed24_n1_model_matrix_summary.md]"
+            "(docs/results/model_matrix/refusal_probe_seed24_n1_model_matrix_summary.md)."
         ),
     ])
 
@@ -209,8 +209,8 @@ def results_block() -> str:
         return _interactive_tables_block(SUMMARY, PAIR_SUMMARY)
     return "\n".join([
         "Full refusal-pole audit table: "
-        "[out/model_matrix/refusal_probe_seed24_n1_model_matrix_summary.md]"
-        "(out/model_matrix/refusal_probe_seed24_n1_model_matrix_summary.md)."
+        "[docs/results/model_matrix/refusal_probe_seed24_n1_model_matrix_summary.md]"
+        "(docs/results/model_matrix/refusal_probe_seed24_n1_model_matrix_summary.md)."
     ])
 
 

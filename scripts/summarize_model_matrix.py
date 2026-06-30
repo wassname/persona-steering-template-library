@@ -152,6 +152,7 @@ def _markdown_text(text: str) -> str:
 
 
 def _write_markdown(path: Path, template_rows: list[dict[str, Any]], pair_rows: list[dict[str, Any]], top_n: int) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     top_template_rows = [
         {
             "score t": f"{row['score_t']:.2f}",
@@ -165,11 +166,11 @@ def _write_markdown(path: Path, template_rows: list[dict[str, Any]], pair_rows: 
         for row in template_rows[:top_n]
     ]
     lines = [
-        "# Refusal-Pole Probe",
+        "# Refusal-pole probe",
         "",
         "Scores are model-equal. Each model first averages the two refusal-probe axes per template, then the table reports reliability-sorted template rows across clean model artifacts.",
         "",
-        "## All Templates",
+        "## All templates",
         "",
         "`score t` is mean score divided by standard error across the four clean model artifacts. `pass` is strict-pass rate; `echo` is explicit persona echo; `refusal` is refusal or AI-role break. Rows are sorted by `score t`.",
         "",
@@ -206,9 +207,9 @@ def main() -> None:
     _write_csv(prefix.with_name(prefix.name + "_template_model_summary.csv"), template_rows)
     _write_jsonl(prefix.with_name(prefix.name + "_template_pair_model_summary.jsonl"), pair_rows)
     _write_csv(prefix.with_name(prefix.name + "_template_pair_model_summary.csv"), pair_rows)
-    _write_markdown(prefix.with_name(prefix.name + "_model_matrix_summary.md"), template_rows, pair_rows, args.top_n)
+    _write_markdown(docs_results.REFUSAL_MODEL_MARKDOWN, template_rows, pair_rows, args.top_n)
     print(f"models={expected_models} templates={len(template_rows)} template_pairs={len(pair_rows)}")
-    print(prefix.with_name(prefix.name + "_model_matrix_summary.md"))
+    print(docs_results.REFUSAL_MODEL_MARKDOWN)
 
 
 if __name__ == "__main__":

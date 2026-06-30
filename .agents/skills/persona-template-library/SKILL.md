@@ -14,17 +14,17 @@ dataset.
 - `README.qmd`: single source for README.md and GitHub Pages.
 - `README.md`: quick-start workflow, headline results, and plot for readers.
 - `docs/choosing_personas.md`: workflow for writing mirrored persona pairs.
-- `docs/persona_prompt_prior_art.md`: annotated prior art for persona prompt
+- `docs/persona_prompt_literature_review.md`: literature review for persona prompt
   shapes used by steering repos and papers.
 - `data/templates/template_catalog.yaml`: reusable template inventory.
 - `data/personas/persona_pairs_pilot_two.jsonl`: measured pilot persona pairs.
 - `data/personas/persona_pairs_v2_candidates.jsonl`: candidate persona pairs.
 - `data/scenarios/scenarios_*.jsonl`: candidate scenario suffixes to validate on the
   target model.
-- `scenario_sources/export_scenarios.py`: writes source loader outputs into
+- `scripts/scenario_sources/export_scenarios.py`: writes source loader outputs into
   `data/scenarios/scenarios_<source>.jsonl`.
-- `out/stats/`: local generated stats and examples; ignored by git, so do not
-  assume these exist in a clean checkout.
+- `data/results/`: committed result tables and reader-facing result assets.
+- `out/`: local scratch outputs and API caches; ignored by git.
 - `scripts/validate_persona_axes_openrouter.py`: live and dry-run validator.
 - `scripts/export_persona_template_stats.py`: converts validator artifacts into
   examples and score tables.
@@ -49,8 +49,8 @@ Use the repo in this order:
 4. Run a dry-run validator command before live OpenRouter calls.
 5. After a live run, export stats and inspect examples before trusting scores.
 
-Read `docs/persona_prompt_prior_art.md` when choosing new persona pairs or
-template shapes from prior work. If the global `persona-steering` skill is
+Read `docs/persona_prompt_literature_review.md` when choosing new persona pairs or
+template shapes from related work. If the global `persona-steering` skill is
 available, read it for longer curation rules and worked examples.
 
 For report edits, edit `README.qmd` and render both outputs:
@@ -75,7 +75,7 @@ uv run python scripts/sync_template_library.py --check
 Export scenarios from source loaders:
 
 ```sh
-uv run python scenario_sources/export_scenarios.py --sources all --limit 1999
+uv run python scripts/scenario_sources/export_scenarios.py --sources all --limit 1999
 ```
 
 Dry-run validation:
@@ -108,7 +108,7 @@ Export stats:
 ```sh
 uv run python scripts/export_persona_template_stats.py \
   out/persona_template_library_v2_pilot_seed24.json \
-  --out-prefix out/stats/v2_pilot_seed24
+  --out-prefix data/results/stats/v2_pilot_seed24
 ```
 
 Refresh README tables:

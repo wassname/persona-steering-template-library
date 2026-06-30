@@ -1,8 +1,8 @@
-# Refusal-Pole Probe
+# Refusal-pole probe
 
 Scores are model-equal. Each model first averages the two refusal-probe axes per template, then the table reports reliability-sorted template rows across clean model artifacts.
 
-## All Templates
+## All templates
 
 `score t` is mean score divided by standard error across the four clean model artifacts. `pass` is strict-pass rate; `echo` is explicit persona echo; `refusal` is refusal or AI-role break. Rows are sorted by `score t`.
 

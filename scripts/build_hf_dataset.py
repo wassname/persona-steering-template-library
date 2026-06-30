@@ -21,7 +21,7 @@ from template_catalog import active_template_rows, load_template_catalog
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 PERSONA_DATA = DATA / "personas"
-STATS = ROOT / "out/stats"
+STATS = ROOT / "data/results/stats"
 
 
 V2_PILOT_META = {
@@ -421,7 +421,7 @@ GitHub repository: https://github.com/wassname/persona-steering-template-library
 
 Evaluated persona/template candidates for steering-vector and preference-pair experiments.
 
-## What This Measures
+## What this measures
 
 How do we know if a persona template is good? We want on-axis variation, but not off-axis variation.
 
@@ -429,7 +429,9 @@ If we choose `honest` and `dishonest` personas, use a template like `You are a {
 
 So we try persona/template pairs on one model, compare the paired completions, and ask whether the template moved the intended axis without obviously changing something else. The final `score` rewards clean movement on the intended axis. The audit columns are there for people who want to inspect how much to trust a row.
 
-This field is pre-scientific in a way: it is still an art. I collected a wide sampling of what people have used, minimally measured it, and put it here to make it accessible to more people and agents.
+This dataset helps you work out the best ingredients for steering your problem: persona pairs, persona templates, and scenario prompts. It measures which combinations move the intended behavior most cleanly, using paired generations and LLM judges instead of guessing from prompt vibes.
+
+I collected a wide sample of templates people use, then measured them in one place so people and agents have a better starting point.
 
 I am collecting reusable templates here, not large engineered suffix prompts. Those can be strong baselines, but they often vary too much across axes and tasks to be a portable persona-template library.
 
@@ -473,9 +475,9 @@ Sources are marked as `source`, `source_type`, and `source_url`.
 
 Do not read every `source_id` as an independent citation. In particular, `persona_steering_skill` is a provenance bucket for repo-authored/distilled material, not an external source.
 
-Generated stats and runtime catalog files live under `out/`. `data/templates/template_catalog.yaml` is the template source of truth.
+Generated stats committed with this repo live under `data/results/`. Runtime scratch files live under `out/`. `data/templates/template_catalog.yaml` is the template source of truth.
 
-Readable prior-art guide: https://github.com/wassname/persona-steering-template-library/blob/main/docs/persona_prompt_prior_art.md
+Readable literature review: https://github.com/wassname/persona-steering-template-library/blob/main/docs/persona_prompt_literature_review.md
 
 ## Tables
 
@@ -498,7 +500,7 @@ This library samples from or was shaped by:
 - wassname/w2schar-mini: https://github.com/wassname/w2schar-mini
 - wassname/AntiPaSTO3: https://github.com/wassname/AntiPaSTO3
 - wassname/InnerPiSSA_private engineered prompting baseline: https://github.com/wassname/InnerPiSSA_private
-- annotated prior-art guide: https://github.com/wassname/persona-steering-template-library/blob/main/docs/persona_prompt_prior_art.md
+- persona prompt literature review: https://github.com/wassname/persona-steering-template-library/blob/main/docs/persona_prompt_literature_review.md
 
 ## Citation
 

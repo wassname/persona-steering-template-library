@@ -207,7 +207,7 @@ def _write_csv(path: Path, rows: list[dict]) -> None:
         return
     fieldnames = sorted({k for row in rows for k in row})
     with path.open("w", newline="") as fh:
-        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer = csv.DictWriter(fh, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         for row in rows:
             writer.writerow({
@@ -219,7 +219,7 @@ def _write_csv(path: Path, rows: list[dict]) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("artifacts", nargs="+", type=Path)
-    ap.add_argument("--out-prefix", default="out/persona_template_library")
+    ap.add_argument("--out-prefix", default="data/results/stats/persona_template_library")
     args = ap.parse_args()
 
     rows = _rows(args.artifacts)

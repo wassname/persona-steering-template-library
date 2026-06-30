@@ -17,17 +17,17 @@ style, length, refusal posture, and task mode as matched as possible.
 - `data/personas/persona_pairs_pilot_two.jsonl`: measured pilot pairs.
 - `data/personas/persona_pairs_v2_candidates.jsonl`: candidate pairs not necessarily in
   the headline run.
-- `docs/persona_prompt_prior_art.md`: annotated examples of what existing
+- `docs/persona_prompt_literature_review.md`: annotated examples of what existing
   steering repos and papers used.
-- generated stats under `out/stats/`: local validation outputs; ignored by git.
+- committed stats under `data/results/stats/`; scratch validation outputs under `out/`.
 - Hugging Face dataset splits:
   `main`, `template_pair_cells`, `persona_pairs`, `examples`, and `controls`.
 
 ## Evidence Base
 
 This guide distills the older w2schar notes on writing personas and rewriting
-pairs. The repo-local prior-art notes are in
-[`docs/persona_prompt_prior_art.md`](persona_prompt_prior_art.md); they separate
+pairs. The repo-local literature review is in
+[`docs/persona_prompt_literature_review.md`](persona_prompt_literature_review.md); they separate
 source types and examples:
 
 - repeng is the clearest source for direct-opposite phrasing, including the
@@ -45,9 +45,9 @@ then paper claims, then in-house iteration notes.
 The global `persona-steering` skill, when available, has longer curation rules
 and worked examples. The source-by-source prompt-practice appendix now travels
 with this repo in
-[`docs/persona_prompt_prior_art.md`](persona_prompt_prior_art.md).
+[`docs/persona_prompt_literature_review.md`](persona_prompt_literature_review.md).
 
-## Pick A Persona Pair
+## Pick a persona pair
 
 Prefer pairs that are short, mirrored, and enactable.
 
@@ -124,7 +124,7 @@ Useful audit columns:
 Use `examples` to decide whether a row is real. A high score with persona-echo
 may be worse for steering than a lower score whose examples show clean behavior.
 
-## Validate A New Pair Or Template
+## Validate a new pair or template
 
 Dry-run first. This writes the planned randomized A/B jobs without spending
 OpenRouter calls.
@@ -157,7 +157,7 @@ Export stats from the live artifact.
 ```sh
 uv run python scripts/export_persona_template_stats.py \
   out/persona_template_library_v2_pilot_seed24.json \
-  --out-prefix out/stats/v2_pilot_seed24
+  --out-prefix data/results/stats/v2_pilot_seed24
 ```
 
 Refresh the rendered README and GitHub Pages site when the committed stats
@@ -181,5 +181,5 @@ Drop or rewrite when:
 - the judge disagreement is high and the examples do not make the movement clear;
 - more than half the examples would need manual rewriting.
 
-This is still pre-scientific. Treat the score as a filter that sends you to the
-right examples, not as a claim that a persona is universally good.
+Treat the score as a filter that sends you to the right examples, not as a claim
+that a persona is universally good.

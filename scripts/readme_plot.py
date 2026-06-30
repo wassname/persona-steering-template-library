@@ -9,8 +9,8 @@ import plotly.graph_objects as go
 
 import docs_results
 
-MAIN_PNG = docs_results.ROOT / "out/on_off_axis.png"
-MAIN_SVG = docs_results.ROOT / "out/on_off_axis.svg"
+MAIN_PNG = docs_results.ROOT / "docs/results/assets/on_off_axis.png"
+MAIN_SVG = docs_results.ROOT / "docs/results/assets/on_off_axis.svg"
 
 
 def _wrap_hover(text: str, width: int = 62) -> str:

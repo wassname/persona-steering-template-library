@@ -1,5 +1,5 @@
 ---
-title: Persona Steering Template Library
+title: Persona steering template library
 format:
   gfm: default
   html:
@@ -14,7 +14,10 @@ execute:
   message: false
 ---
 
-Evaluated persona/template candidates for steering-vector and preference-pair experiments.
+This repo helps you work out the best ingredients for steering your problem:
+persona pairs, persona templates, and scenario prompts. It measures which
+combinations move the intended behavior most cleanly, using paired generations
+and LLM judges instead of guessing from prompt vibes.
 
 Dataset: [wassname/persona-steering-template-library](https://huggingface.co/datasets/wassname/persona-steering-template-library)
 
@@ -27,36 +30,36 @@ ROOT = Path.cwd()
 sys.path.insert(0, str(ROOT / "scripts"))
 ```
 
-## Quick Start
+## Quick start
 
 Use this repo to choose the prompt parts for persona steering:
 
 | choice | use |
 |---|---|
 | persona templates | Start with the top Results table, the Hugging Face `main` split, or [`data/templates/template_catalog.yaml`](data/templates/template_catalog.yaml). |
-| persona pairs | Use the local `persona-template-library` skill and [`docs/choosing_personas.md`](docs/choosing_personas.md) to write mirrored positive/negative poles. |
+| persona pairs | Use the local [`persona-template-library` skill](.agents/skills/persona-template-library/SKILL.md) and [`docs/choosing_personas.md`](docs/choosing_personas.md) to write mirrored positive/negative poles. |
 | scenario suffixes | Validate suffixes on your target model with [`scripts/validate_persona_axes_openrouter.py`](scripts/validate_persona_axes_openrouter.py). |
 
 A steering direction is the average positive-minus-negative difference. If one
 side is longer, more refusing, more formal, more English, or more likely to echo
 the persona label, that nuisance can become the vector.
 
-## What This Measures
+## What this measures
 
-This repo tests whether a persona template changes the intended behavior without
-also changing refusal, language, length, style, or generic assistant tone.
+The core question is simple: if you want to steer a model on some behavior, what
+persona wording should you use?
 
-The catalog has ~100 reusable templates. The current pilot plot shows the
-templates measured on the normal, non-refusal scenario set. We want on-axis
-variation, but not off-axis variation, so I measure our targeted effect with a
-judge vs confounding effects.
+The catalog has ~100 reusable templates. The current pilot plot measures them on
+normal, non-refusal scenarios. Good templates create strong on-axis variation
+without also changing refusal, language, length, style, or generic assistant
+tone.
 
-What is a persona template? Well in [steering](https://github.com/wassname/steering-lite) (of all [kinds](https://github.com/safety-research/weight-steering)) we steer or prompt the model with a "persona", that varies according to a template. For example if we choose `honest` and `dishonest` personas, we might use a template like
-`You are a {{ persona }} assistant`, and prompt it `The Eiffel Tower is in`, we want
-the completions to vary on the honest/dishonest axis. `in Paris` versus
-`in Berlin` shows on-axis variation. `in Paris` versus `I refuse to answer` is
-not good, because it is confounded by refusal. Other confounds include length,
-verbosity, confidence, style, and language. All together it might look like this:
+A persona template is the wrapper around the trait you want to steer. For
+example, with the persona pair `honest` versus `dishonest`, a template might be
+`You are a {{ persona }} assistant`. If the prompt is `The Eiffel Tower is in`,
+then `in Paris` versus `in Berlin` is on-axis movement. `in Paris` versus
+`I refuse to answer` is not useful, because it mostly measures refusal. Other
+common confounds are length, verbosity, confidence, style, and language.
 
 ```
 You are an honest assistant.         <- filled template with honest
@@ -71,7 +74,9 @@ A: in Berlin                          <- expected answer (for a dishonest vector
 A: As an AI assistant I can not...    <- confounded answer (for a dishonest vector)
 ```
 
-Obviously we want one to tell the truth and the other to lie (on-axis). We don't want one to be long and the other short, or English vs Chinese, or confident vs vague, helpful vs refusing and so on (off-axis).
+For an honesty vector, we want one side to tell the truth and the other to lie.
+We do not want one side to be long and the other short, English versus Chinese,
+confident versus vague, or helpful versus refusing.
 
 So we try persona/template/suffix combinations on a model, compare the paired
 completions, and ask whether the template moved the intended axis without
@@ -79,11 +84,10 @@ obviously changing something else. The final `score` rewards clean movement on
 the intended axis. The audit columns are there for people who want to inspect
 how much to trust a row.
 
-This field is pre-scientific in a way: it is still an art. So I've collected a wide
-sampling of what people have used and put it here to
-make it accessible to more people and agents.
+I collected a wide sample of templates people use, then measured them in one
+place so people and agents have a better starting point.
 
-Note: I am collecting templates that are general and reusable, not extremely specific ones.
+The catalog focuses on general, reusable templates rather than one-off prompts.
 
 ## Results
 
@@ -102,7 +106,7 @@ readme_plot.write_main_plot_assets()
 if os.environ["PSTL_DOC_TARGET"] == "html":
     display(readme_plot.template_scatter())
 else:
-    display(Markdown("![plot](./out/on_off_axis.png)"))
+    display(Markdown("![plot](./docs/results/assets/on_off_axis.png)"))
 ```
 
 ```{python}
@@ -149,8 +153,8 @@ Provenance:
 
 The authoritative template inventory is
 [`data/templates/template_catalog.yaml`](data/templates/template_catalog.yaml).
-The readable prior-art guide is
-[`docs/persona_prompt_prior_art.md`](docs/persona_prompt_prior_art.md).
+The readable literature review is
+[`docs/persona_prompt_literature_review.md`](docs/persona_prompt_literature_review.md).
 
 Off-axis confounds considered:
 
@@ -182,7 +186,7 @@ This library samples from or was shaped by:
 - [sycophancy literature](https://arxiv.org/abs/2310.13548)
 - [OLMo 3 report](https://arxiv.org/abs/2512.13961)
 - [wassname/AntiPaSTO](https://github.com/wassname/AntiPaSTO)
-- annotated guide: [`docs/persona_prompt_prior_art.md`](docs/persona_prompt_prior_art.md)
+- literature review: [`docs/persona_prompt_literature_review.md`](docs/persona_prompt_literature_review.md)
 - full inventory: [`data/templates/template_catalog.yaml`](data/templates/template_catalog.yaml)
 
 ## Citation
@@ -198,7 +202,7 @@ This library samples from or was shaped by:
 
 ## Appendices
 
-## Appendix: Choosing Scenario Suffixes
+## Appendix: choosing scenario suffixes
 
 Use this to test whether your scenario prompts are good for steering. Hold the
 persona pair fixed, vary the scenario prompt, and keep scenarios that make the
