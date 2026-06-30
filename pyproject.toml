@@ -24,10 +24,14 @@ dependencies = [
   "itables>=2.8.1",
   "polars>=1.41.2",
   "datasets>=5.0.0",
+  "openrouter-wrapper",
 ]
 
 [tool.uv]
 package = false
+
+[tool.uv.sources]
+openrouter-wrapper = { git = "https://github.com/wassname/openrouter_wrapper" }
 
 [tool.ruff]
 line-length = 100

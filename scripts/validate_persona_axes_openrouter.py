@@ -37,15 +37,14 @@ from typing import Any
 
 from dotenv import load_dotenv
 from loguru import logger
-from openai import AsyncOpenAI
+from openrouter_wrapper.retry import openrouter_request
 from tabulate import tabulate
 from tqdm.asyncio import tqdm as atqdm
 
 from template_catalog import active_template_rows, load_template_catalog
 
 ROOT = Path(__file__).resolve().parents[1]
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-JSON_RETRIES = 3
+JSON_RETRIES = 5
 
 
 @dataclass(frozen=True)
@@ -218,7 +217,7 @@ def _assert_json_text(text: str, json_schema: dict | None = None) -> None:
 
 
 def _message_reasoning(message: Any) -> str:
-    raw = message.model_dump(mode="json")
+    raw = message if isinstance(message, dict) else message.model_dump(mode="json")
     for key in ("reasoning", "reasoning_content"):
         value = raw.get(key)
         if value:
@@ -681,18 +680,11 @@ confound, not the average."""
 
 
 class OpenRouter:
-    def __init__(self, cache_dir: Path, concurrency: int):
-        self.client = AsyncOpenAI(
-            base_url=OPENROUTER_BASE_URL,
-            api_key=os.environ["OPENROUTER_API_KEY"],
-            default_headers={
-                "HTTP-Referer": "https://github.com/wassname/w2schar-mini",
-                "X-Title": "w2schar-mini persona-axis validation",
-            },
-        )
+    def __init__(self, cache_dir: Path, concurrency: int, provider_order: tuple[str, ...]):
         self.cache_dir = cache_dir
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.sem = asyncio.Semaphore(concurrency)
+        self.provider_order = provider_order
 
     async def chat_jsonish(
         self,
@@ -720,6 +712,8 @@ class OpenRouter:
         }
         if json_schema is not None:
             payload["response_format"] = json_schema
+        if self.provider_order:
+            payload["provider"] = {"order": list(self.provider_order)}
         key = f"{cache_tag}_{_hkey({'payload': payload, 'extra_body': extra_body})}.json"
         path = self.cache_dir / key
         if path.exists():
@@ -738,18 +732,15 @@ class OpenRouter:
         last_error: Exception | None = None
         for attempt in range(1, attempts + 1):
             async with self.sem:
-                resp = await self.client.chat.completions.create(
-                    **payload, extra_body=extra_body)
-            # OpenRouter returns an error body with choices=None on a provider
-            # error / content filter / rate limit; treat as a retryable failure
-            # instead of crashing the whole screen on `resp.choices[0]`.
-            if not getattr(resp, "choices", None):
-                last_error = RuntimeError(f"empty response (no choices): {getattr(resp, 'error', resp)!r}")
+                resp = await openrouter_request({**payload, **extra_body}, timeout=90.0)
+            choices = resp["choices"]
+            if not choices:
+                last_error = RuntimeError(f"empty response choices: {resp!r}")
                 if attempt < attempts:
                     await asyncio.sleep(min(30.0, 2.0 * attempt))
                 continue
-            message = resp.choices[0].message
-            content = message.content or ""
+            message = choices[0]["message"]
+            content = message.get("content") or ""
             last_content = content
             if json_schema is not None:
                 try:
@@ -768,7 +759,7 @@ class OpenRouter:
                 "payload": payload,
                 "extra_body": extra_body,
                 "content": content,
-                "message": message.model_dump(mode="json"),
+                "message": message,
                 "reasoning": _message_reasoning(message),
             }, indent=2))
             return content
@@ -1261,6 +1252,9 @@ async def amain(args) -> None:
     )
     if not axis_judge_models:
         raise ValueError("--axis-judge-models selected zero models")
+    provider_order = tuple(
+        provider.strip() for provider in args.provider_order.split(",") if provider.strip()
+    )
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1306,6 +1300,7 @@ async def amain(args) -> None:
             "style_judge_model": args.judge_model,
             "gen_temperature": args.gen_temperature,
             "judge_temperature": 0.0,
+            "provider_order": list(provider_order),
             "seed": args.seed,
             "max_word_delta_frac": args.max_word_delta_frac,
             "n_prompts": len(rows),
@@ -1324,7 +1319,7 @@ async def amain(args) -> None:
         logger.error("OPENROUTER_API_KEY not set")
         sys.exit(1)
 
-    router = OpenRouter(Path(args.cache_dir), args.concurrency)
+    router = OpenRouter(Path(args.cache_dir), args.concurrency, provider_order)
     tasks = []
     for row_i, row in enumerate(rows, start=1):
         for axis in axes:
@@ -1346,11 +1341,12 @@ async def amain(args) -> None:
         f"{len(rows)} prompts × {len(axes)} axes × {len(templates)} templates "
         f"= {len(tasks)} pairs; generator={args.generator_model}; "
         f"axis_judges={','.join(axis_judge_models)}; style_judge={args.judge_model}; "
-        f"gen_temperature={args.gen_temperature}; judge_temperature=0.0"
+        f"gen_temperature={args.gen_temperature}; judge_temperature=0.0; "
+        f"provider_order={','.join(provider_order) or 'OpenRouter default'}"
     )
     tasks = [asyncio.create_task(task) for task in tasks]
     results = []
-    for task in atqdm(tasks, total=len(tasks), desc="persona-axes"):
+    for task in atqdm(asyncio.as_completed(tasks), total=len(tasks), desc="persona-axes"):
         rec = await task
         results.append(rec)
         artifact = {
@@ -1362,6 +1358,7 @@ async def amain(args) -> None:
             "gen_temperature": args.gen_temperature,
             "judge_temperature": 0.0,
             "family": args.family,
+            "provider_order": list(provider_order),
             "seed": args.seed,
             "max_word_delta_frac": args.max_word_delta_frac,
             "n_prompts": len(rows),
@@ -1386,6 +1383,7 @@ async def amain(args) -> None:
         "gen_temperature": args.gen_temperature,
         "judge_temperature": 0.0,
         "family": args.family,
+        "provider_order": list(provider_order),
         "seed": args.seed,
         "max_word_delta_frac": args.max_word_delta_frac,
         "n_prompts": len(rows),
@@ -1433,6 +1431,8 @@ def main() -> None:
     ap.add_argument("--max-word-delta-frac", type=float, default=0.0,
                     help="optional hard length gate; 0 means report-only")
     ap.add_argument("--concurrency", type=int, default=16)
+    ap.add_argument("--provider-order", default="DeepInfra",
+                    help="comma-separated OpenRouter provider preference order; empty uses OpenRouter default")
     ap.add_argument("--cache-dir", default="out/cache/persona_axes_openrouter")
     ap.add_argument("--out", default="out/persona_axes_openrouter.json")
     ap.add_argument("--dry-run", action="store_true",
