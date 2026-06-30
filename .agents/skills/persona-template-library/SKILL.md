@@ -75,7 +75,7 @@ uv run python scripts/sync_template_library.py --check
 Export scenarios from source loaders:
 
 ```sh
-uv run python scenario_sources/export_scenarios.py --sources machiavelli
+uv run python scenario_sources/export_scenarios.py --sources all --limit 1999
 ```
 
 Dry-run validation:

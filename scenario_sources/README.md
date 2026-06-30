@@ -10,16 +10,16 @@ long; its committed cache is `scenario_sources/data/machiavelli_summaries.jsonl`
 and the published derived dataset is
 [`wassname/machiavelli_character_scenarios`](https://huggingface.co/datasets/wassname/machiavelli_character_scenarios).
 
-Generate local scenario files:
+Generate local scenario samples for validation:
 
 ```sh
-uv run python scenario_sources/export_scenarios.py --sources machiavelli
+uv run python scenario_sources/export_scenarios.py --sources all --limit 1999
 ```
 
-Generate from every loader when the source datasets are available:
+Generate a single source:
 
 ```sh
-uv run python scenario_sources/export_scenarios.py --sources all
+uv run python scenario_sources/export_scenarios.py --sources machiavelli --limit 1999
 ```
 
 Screen a generated file before using it for steering pairs:
