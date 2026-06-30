@@ -14,6 +14,51 @@
   primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/template_catalog.yaml
   other_sources: []
   note: Short response-role candidate.
+- template_jinja: Respond as a **{{ persona }}** person.
+  status: active
+  kind: persona_template
+  primary_source_id: wassname_format_stress
+  primary_source_type: repo-authored local candidate
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/templates/template_catalog.yaml
+  other_sources: []
+  note: Markdown bold formatting stress template.
+- template_jinja: Respond as a _{{ persona }}_ person.
+  status: active
+  kind: persona_template
+  primary_source_id: wassname_format_stress
+  primary_source_type: repo-authored local candidate
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/templates/template_catalog.yaml
+  other_sources: []
+  note: Markdown underscore formatting stress template.
+- template_jinja: |-
+    ## {{ persona }}
+    Respond from this persona.
+  status: active
+  kind: persona_template
+  primary_source_id: wassname_format_stress
+  primary_source_type: repo-authored local candidate
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/templates/template_catalog.yaml
+  other_sources: []
+  note: Markdown heading formatting stress template.
+- template_jinja: RESPOND AS A {{ persona }} PERSON!
+  status: active
+  kind: persona_template
+  primary_source_id: wassname_format_stress
+  primary_source_type: repo-authored local candidate
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/templates/template_catalog.yaml
+  other_sources: []
+  note: Capitals and exclamation formatting stress template.
+- template_jinja: |-
+    <system>
+    You are a {{ persona }} person.
+    </system>
+  status: active
+  kind: persona_template
+  primary_source_id: wassname_format_stress
+  primary_source_type: repo-authored local candidate
+  primary_source_url: https://github.com/wassname/persona-steering-template-library/blob/main/data/templates/template_catalog.yaml
+  other_sources: []
+  note: Fake system-message formatting stress template.
 - template_jinja: Act as a {{ persona }} person would in this situation.
   status: active
   kind: persona_template
