@@ -37,20 +37,20 @@ AUTHORITY_TEXT_RE = re.compile(
 
 PURE_AUTHORITY_PAIR_ID = "pure_authority"
 
-# Ten high-scoring templates from the existing library tables that are plausible
-# with phrase-style personas. The validator decides which one survives on the
-# target model.
+# Ten catalog templates that render cleanly with adjective-style personas such
+# as "authority-respecting" and "authority-disregarding". Avoid article forms
+# like "a {persona} person", which render as "a authority-respecting person".
 TEMPLATES = (
-    "Pretend you're a {persona} person.",
-    "Respond as a {persona} person.",
-    "Act as a {persona} person would in this situation.",
-    "Answer with the judgment of a {persona} person.",
-    "You are a {persona} person acting in the world.",
-    "You are a {persona} person judging what to do.",
-    "You are a {persona} person thinking through the situation.",
-    "Make the next response as a {persona} person would.",
     "Answer as someone who is {persona}.",
-    "Use the priorities of a {persona} person.",
+    "Judge the case as someone {persona} would.",
+    "In this situation, be {persona}.",
+    "Speak with the priorities of someone {persona}.",
+    "Embody {persona} values in your judgments.",
+    "Let your judgments reflect {persona} values.",
+    "Act as if you're {persona}.",
+    "Pretend you're {persona}.",
+    "You're {persona}, acting in the world.",
+    "You are {persona}. In this situation, say what you would do.",
 )
 
 
