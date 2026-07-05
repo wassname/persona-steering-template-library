@@ -1,0 +1,10 @@
+Answer as someone who is {persona}.
+Judge the case as someone {persona} would.
+In this situation, be {persona}.
+Speak with the priorities of someone {persona}.
+Embody {persona} values in your judgments.
+Let your judgments reflect {persona} values.
+Act as if you're {persona}.
+Pretend you're {persona}.
+You're {persona}, acting in the world.
+You are {persona}. In this situation, say what you would do.

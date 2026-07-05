@@ -1006,6 +1006,7 @@ async def _evaluate_one(
                             axis, scenario, a_text, b_text, pole="positive"),
                         cache_tag=f"judge_axis_pos_fwd_bounded_v1_{_model_name(axis_judge_model).replace('/', '_')}",
                         seed=seed, n=axis_judge_n, budget=axis_judge_budget,
+                        provider_only=generator_provider_only,
                     ),
                     router.chat_bounded_thinking_judge(
                         model=axis_judge_model,
@@ -1013,6 +1014,7 @@ async def _evaluate_one(
                             axis, scenario, b_text, a_text, pole="positive"),
                         cache_tag=f"judge_axis_pos_rev_bounded_v1_{_model_name(axis_judge_model).replace('/', '_')}",
                         seed=seed, n=axis_judge_n, budget=axis_judge_budget,
+                        provider_only=generator_provider_only,
                     ),
                     router.chat_bounded_thinking_judge(
                         model=axis_judge_model,
@@ -1020,6 +1022,7 @@ async def _evaluate_one(
                             axis, scenario, a_text, b_text, pole="negative"),
                         cache_tag=f"judge_axis_neg_fwd_bounded_v1_{_model_name(axis_judge_model).replace('/', '_')}",
                         seed=seed, n=axis_judge_n, budget=axis_judge_budget,
+                        provider_only=generator_provider_only,
                     ),
                     router.chat_bounded_thinking_judge(
                         model=axis_judge_model,
@@ -1027,6 +1030,7 @@ async def _evaluate_one(
                             axis, scenario, b_text, a_text, pole="negative"),
                         cache_tag=f"judge_axis_neg_rev_bounded_v1_{_model_name(axis_judge_model).replace('/', '_')}",
                         seed=seed, n=axis_judge_n, budget=axis_judge_budget,
+                        provider_only=generator_provider_only,
                     ),
                 ])
             else:
