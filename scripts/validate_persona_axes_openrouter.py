@@ -1190,6 +1190,14 @@ async def _evaluate_one(
             dim: _bounded_score(confound_j, f"{dim}_likert", 1.0, 7.0)
             for dim in OFF_AXIS_DIMS
         }
+        # When --exclude-confound-dims is set, recompute the off-axis max excluding
+        # on-axis dims (e.g. honesty_truthfulness for the honesty axis) to avoid
+        # circular penalization of the very behavior we're steering.
+        if args.exclude_confound_dims:
+            off_axis_for_gate = {k: v for k, v in off_axis_likerts.items() if k not in args.exclude_confound_dims}
+            off_axis_problem_likert = max(off_axis_for_gate.values()) if off_axis_for_gate else 1.0
+        else:
+            off_axis_problem_likert = float(confound_j["off_axis_problem_likert"])
         max_off_axis_category_likert = max(off_axis_likerts.values())
         pos_refusal_phrase_hits = _refusal_phrase_hits(pos_text)
         neg_refusal_phrase_hits = _refusal_phrase_hits(neg_text)
@@ -1216,13 +1224,24 @@ async def _evaluate_one(
         )
         length_ok = True if max_word_delta_frac <= 0 else abs(word_delta_frac) <= max_word_delta_frac
         strict_pass = (
-            axis_delta >= 3
-            and float(confound_j["off_axis_problem_likert"]) <= 2.0
+            axis_delta >= args.axis_delta_threshold
+            and off_axis_problem_likert <= args.off_axis_threshold
             and bool(confound_j["usable_for_training"])
             and max_style_abs_delta <= 2
             and length_ok
             and not (pos_echo or neg_echo or pos_refusal or neg_refusal)
             and not judge_did_not_commit
+        )
+        # Overall score: net axis signal = on-axis movement minus off-axis contamination minus style shift.
+        # All three on ~1-7 scale. Boolean failures (echo, refusal, no-commit) get -3 each so they sort below clean rows.
+        # Use this to rank ALL scenarios and take the top N, not just strict-pass filtering.
+        overall_score = (
+            axis_delta
+            - off_axis_problem_likert
+            - max_style_abs_delta
+            - 3.0 * (pos_echo or neg_echo)
+            - 3.0 * (pos_refusal or neg_refusal)
+            - 3.0 * judge_did_not_commit
         )
         base.update({
             "pos_response": pos_text,
@@ -1272,6 +1291,7 @@ async def _evaluate_one(
             "judge_did_not_commit": judge_did_not_commit,
             "axis_judge_method": axis_judge_method,
             "strict_pass": strict_pass,
+            "overall_score": round(overall_score, 3),
         })
     except Exception as e:
         base["error"] = f"{type(e).__name__}: {e}"
@@ -1303,6 +1323,7 @@ def summarize(results: list[dict]) -> list[dict]:
         axis_delta_judge_std = [float(r["axis_delta_judge_std"]) for r in rows]
         echo = sum(bool(r["persona_echo"]) for r in rows) / n
         refusal = sum(bool(r["refusal_or_ai_break"]) for r in rows) / n
+        scores = [float(r.get("overall_score", 0)) for r in rows]
         out.append({
             "axis": axis_id,
             "template": template,
@@ -1310,6 +1331,7 @@ def summarize(results: list[dict]) -> list[dict]:
             "strict_pass_rate": round(pass_rate, 3),
             "mean_axis_delta": round(_mean(axis_delta), 3),
             "mean_axis_delta_judge_std": round(_mean(axis_delta_judge_std), 3),
+            "mean_overall_score": round(_mean(scores), 3),
             "mean_off_axis_problem": round(_mean(off), 3),
             "mean_max_off_axis_category_likert": round(_mean(off_cat_max), 3),
             "mean_max_style_abs_delta": round(_mean(style_max), 3),
@@ -1319,7 +1341,7 @@ def summarize(results: list[dict]) -> list[dict]:
             "recommended": (
                 n >= 3
                 and pass_rate >= 0.8
-                and _mean(axis_delta) >= 3
+                and _mean(axis_delta) >= args.axis_delta_threshold
                 and _mean(off) <= 2
                 and _mean(style_max) <= 2
                 and echo == 0
@@ -1588,6 +1610,15 @@ def main() -> None:
     ap.add_argument("--n-per-source", type=int, default=None,
                     help="stratified sampling: take this many scenarios from EACH family (overrides --n). "
                          "Use this so each source contributes equally, not proportional to its size.")
+    ap.add_argument("--axis-delta-threshold", type=float, default=3.0,
+                    help="minimum axis_delta (1-7 Likert) for strict_pass. Default 3.0 (authority-calibrated). "
+                         "Lower to 2.0 for hard-to-steer axes where 3.0 yields too few strict-pass scenarios.")
+    ap.add_argument("--exclude-confound-dims", type=str, default="",
+                    help="comma-separated confound dims to EXCLUDE from the off-axis gate (recompute max from remaining). "
+                         "Use for on-axis dims that circularly penalize the axis being steered, e.g. "
+                         "--exclude-confound-dims honesty_truthfulness,praise_flattery,sycophancy for the honesty axis.")
+    ap.add_argument("--off-axis-threshold", type=float, default=2.0,
+                    help="maximum off_axis_problem_likert for strict_pass. Default 2.0.")
     ap.add_argument("--axes", default=str(ROOT / "data/personas/persona_pairs_pilot_two.jsonl"),
                     help="persona-pair JSONL path")
     ap.add_argument("--templates", default=str(ROOT / "data/templates/template_catalog.yaml"),
@@ -1611,6 +1642,10 @@ def main() -> None:
     ap.add_argument("--axis-judge-budget", type=int, default=4096,
                     help="bounded_thinking: phase-1 thinking max_tokens cap")
     args = ap.parse_args()
+    args.exclude_confound_dims = (
+        {d.strip() for d in args.exclude_confound_dims.split(",") if d.strip()}
+        if args.exclude_confound_dims else set()
+    )
     asyncio.run(amain(args))
 
 
