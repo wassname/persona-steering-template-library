@@ -58,12 +58,7 @@ Use the repo in this order:
    or multi-turn behavior.
 4. Run a dry-run validator command before live OpenRouter calls.
 5. For a steering-ready selection, use a two-stage screen:
-   Stage A = broad template evidence on a small source-diverse panel; Stage B =
-   the chosen axis/template on up to 30 axis-affordance-ranked scenarios per
-   source. Run Stage A per-axis (one axis at a time), not as a cross-product of
-   all axes x all templates -- persona axes are mostly orthogonal, so the
-   combinatorial cost is unnecessary. For N axes you run N Stage A passes (one
-   template winner each), then N Stage B passes, not N^2.
+   Stage A = broad template evidence on a small source-diverse panel (ALL templates x FEW scenarios, e.g. 100 templates x 1/source); Stage B = the chosen winner/template on MANY axis-affordance-ranked scenarios (1 template x ~1000 scenarios). This cost structure is deliberate: 100x12 + 1x1000 << 100x1000, so test all templates cheaply first, then spend scenarios on the winner only. Run Stage A per-axis (one axis at a time), not as a cross-product of all axes x all templates -- persona axes are mostly orthogonal, so the combinatorial cost is unnecessary. For N axes you run N Stage A passes (one template winner each), then N Stage B passes, not N^2.
    Before Stage B, write or adapt a prepare script like
    `scripts/prepare_authority_steering_selection.py` for the new axis. Random
    scenario sampling is insufficient for narrow axes because most scenarios will
