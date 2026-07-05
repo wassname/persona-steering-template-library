@@ -411,9 +411,25 @@ def _rows_for_family(family: str) -> list[dict]:
     return [dict(r) for r in BUILTIN_SCENARIOS[family]]
 
 
-def _select_rows(families: str, n: int, seed: int) -> list[dict]:
+def _select_rows(families: str, n: int, seed: int, n_per_source: int | None = None) -> list[dict]:
     rng = random.Random(seed)
-    rows: list[dict] = []
+    if n_per_source is not None:
+        # stratified: take n_per_source from each family (even sampling, not pooled)
+        rows: list[dict] = []
+        for family in [f.strip() for f in families.split(",") if f.strip()]:
+            fam_rows = [{**r, "selected_family": family} for r in _rows_for_family(family)]
+            rng.shuffle(fam_rows)
+            if len(fam_rows) < n_per_source:
+                raise ValueError(
+                    f"family {family!r} has only {len(fam_rows)} rows but --n-per-source={n_per_source}"
+                )
+            rows.extend(fam_rows[:n_per_source])
+        if not rows:
+            raise ValueError("selected zero scenario rows")
+        rng.shuffle(rows)
+        return rows
+    # pooled (legacy): shuffle all families together, take n total
+    rows = []
     for family in [f.strip() for f in families.split(",") if f.strip()]:
         rows.extend({**r, "selected_family": family} for r in _rows_for_family(family))
     if not rows:
@@ -1387,7 +1403,7 @@ async def amain(args) -> None:
     load_dotenv(ROOT / ".env")
     axes = _select_axes(args.axes)
     templates = _select_templates(args.templates)
-    rows = _select_rows(args.family, args.n, args.seed)
+    rows = _select_rows(args.family, args.n, args.seed, args.n_per_source)
     axis_judge_models = tuple(
         model.strip() for model in args.axis_judge_models.split(",") if model.strip()
     )
@@ -1568,7 +1584,10 @@ def main() -> None:
                     help="generation temperature; default 0 to avoid sampling-diff confounds")
     ap.add_argument("--family", default="character",
                     help="comma-separated scenario families; default avoids sycophancy")
-    ap.add_argument("--n", type=int, default=6, help="number of scenario prompts")
+    ap.add_argument("--n", type=int, default=6, help="number of scenario prompts (pooled across all families)")
+    ap.add_argument("--n-per-source", type=int, default=None,
+                    help="stratified sampling: take this many scenarios from EACH family (overrides --n). "
+                         "Use this so each source contributes equally, not proportional to its size.")
     ap.add_argument("--axes", default=str(ROOT / "data/personas/persona_pairs_pilot_two.jsonl"),
                     help="persona-pair JSONL path")
     ap.add_argument("--templates", default=str(ROOT / "data/templates/template_catalog.yaml"),

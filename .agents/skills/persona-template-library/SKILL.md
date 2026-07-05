@@ -44,7 +44,11 @@ dataset.
 Use the repo in this order:
 
 1. Choose persona templates from the `README.md` Results Snapshot table, the
-   Hugging Face `main` split, or `data/templates/template_catalog.yaml`.
+   Hugging Face `main` split, or `data/templates/template_catalog.yaml`. For
+   Stage A, test the full catalog when budget permits. If budget is constrained,
+   start from the top Results Snapshot scorers plus any strong templates that
+   plausibly fit the new axis. Use a deterministic top-N rule when you
+   downsample; do not use a small hand-picked subset.
 2. Choose persona pairs with `docs/choosing_personas.md`. Mirror-test each pair:
    every positive clause needs a negative counterpart that only flips the
    intended pole.
@@ -54,10 +58,20 @@ Use the repo in this order:
    or multi-turn behavior.
 4. Run a dry-run validator command before live OpenRouter calls.
 5. For a steering-ready selection, use a two-stage screen:
-   Stage A = several axes/templates on a small source-diverse panel; Stage B =
-   the chosen axis/template on up to 30 scenarios per source.
-6. Export strict-pass scenarios only. Do not steer from source-balanced filler rows
-   when a source produced no clean scenarios.
+   Stage A = broad template evidence on a small source-diverse panel; Stage B =
+   the chosen axis/template on up to 30 axis-affordance-ranked scenarios per
+   source. Before Stage B, write or adapt a prepare script like
+   `scripts/prepare_authority_steering_selection.py` for the new axis. Random
+   scenario sampling is insufficient for narrow axes because most scenarios will
+   not afford the intended behavior. Use `--n-per-source N` (stratified) so each
+   source contributes N scenarios equally, not proportional to source size; the
+   legacy `--n` pools all sources and samples N total (large sources dominate).
+6. Export strict-pass scenarios only. If Stage B gets 0 strict-pass scenarios,
+   test more ranked scenarios (`--n-per-source 50+`, more sources) and/or try
+   stronger templates (the full catalog includes system-prompt, red-team, and
+   jailbreak-style templates that break the model out of its default stance).
+   Do not relax the strict gate, lower the export rule, or steer from
+   source-balanced filler rows when a source produced no clean scenarios.
 7. Commit reusable selected scenario JSONL files under `data/selections/`.
 8. After a live run, inspect examples before trusting scores.
 
@@ -97,7 +111,7 @@ uv run python scripts/validate_persona_axes_openrouter.py \
   --axes data/personas/persona_pairs_pilot_two.jsonl \
   --templates data/templates/template_catalog.yaml \
   --family data/scenarios/scenarios_v2_candidates.jsonl \
-  --n 1 \
+  --n-per-source 2 \
   --seed 24 \
   --dry-run \
   --out out/persona_template_library_dryrun.json
@@ -110,7 +124,7 @@ OPENROUTER_API_KEY=... uv run python scripts/validate_persona_axes_openrouter.py
   --axes data/personas/persona_pairs_pilot_two.jsonl \
   --templates data/templates/template_catalog.yaml \
   --family data/scenarios/scenarios_v2_candidates.jsonl \
-  --n 2 \
+  --n-per-source 2 \
   --seed 24 \
   --out out/persona_template_library_v2_pilot_seed24.json
 ```

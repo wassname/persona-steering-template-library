@@ -47,6 +47,15 @@ the persona label, that nuisance can become the vector.
 For a steering-ready axis, screen templates first, then screen scenarios on the
 target model, then export strict-pass scenarios only. Full agent recipe:
 [`persona-template-library` skill](.agents/skills/persona-template-library/SKILL.md).
+Stage A should test the full template catalog when budget permits. If budget is
+constrained, use a deterministic top-N rule from the Results Snapshot plus any
+strong templates that plausibly fit the new axis. Do not use a small hand-picked
+subset.
+Before Stage B, rank or filter candidate scenarios by axis affordance; random
+sampling is usually insufficient for narrow axes because most scenarios will not
+afford the intended behavior. If Stage B gets 0 strict-pass scenarios, test more
+ranked scenarios and/or stronger templates. Do not relax the strict gate or
+export filler rows.
 Example selected set:
 [`data/selections/authority_dignity_strict22.jsonl`](data/selections/authority_dignity_strict22.jsonl).
 It is small because the authority-only screen was strict: 22/342 candidate
@@ -226,6 +235,8 @@ uv run python scripts/validate_persona_axes_openrouter.py \
 ```
 
 - Use diverse scenarios first, then select the ones that separate on your model.
+- For Stage B, rank or filter the scenario pool for the axis before validation.
+  Random sampling is a weak default for narrow axes.
 - Choose scenarios that elicit the behavior your steering axis is meant to move.
   Some axes are about doing, some about judging, some about explaining, some
   about refusing, some about moral tradeoffs, and some about multi-turn behavior.
