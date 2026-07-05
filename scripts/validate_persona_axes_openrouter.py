@@ -41,6 +41,7 @@ from openrouter_wrapper.retry import openrouter_request
 from tabulate import tabulate
 from tqdm.asyncio import tqdm as atqdm
 
+from bounded_thinking_judge import judge as bounded_judge
 from template_catalog import active_template_rows, load_template_catalog
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -558,6 +559,33 @@ def _persona_text(axis: Axis, template: str, descriptor: str, pole: str) -> str:
 
 def _axis_pairwise_judge_prompt(axis: Axis, scenario: str, a: str, b: str,
                                 *, pole: str) -> str:
+    return _axis_pairwise_judge_body(axis, scenario, a, b, pole=pole) + """
+
+Return JSON matching the provided schema:
+- target_reason: string, one short sentence
+- A_more_target_than_B: float
+
+Put target_reason before A_more_target_than_B in the JSON object."""
+
+
+def _axis_pairwise_bounded_judge_prompt(axis: Axis, scenario: str, a: str, b: str,
+                                        *, pole: str) -> str:
+    """Bounded-thinking variant: same body, but a single SCORE line instead of JSON.
+
+    Mirrors _axis_pairwise_judge_prompt; the bounded judge (scripts/bounded_thinking_judge.py)
+    parses `SCORE: <int -5..+5>` with a `found` flag so a non-verdict is never laundered into a
+    tie. SCORE semantics match the 1..5 scale: negative = A less target-like, 0 = tied,
+    positive = A more target-like (so A_more_target_than_B = 3.0 + 0.4*SCORE).
+    """
+    return _axis_pairwise_judge_body(axis, scenario, a, b, pole=pole) + """
+
+Reply with exactly one line: `SCORE: <int -5..+5>` (negative = A is less target-like
+than B, 0 = A and B are indistinguishable or tied on the target, positive = A is more
+target-like than B). Use exactly 0 only when genuinely tied. Put this line FIRST."""
+
+
+def _axis_pairwise_judge_body(axis: Axis, scenario: str, a: str, b: str,
+                              *, pole: str) -> str:
     if pole == "positive":
         target = axis.positive_behavior
     elif pole == "negative":
@@ -595,12 +623,7 @@ Use one decimal place when the evidence is between anchors. Prefer decimals
 such as 2.4, 2.7, 3.2, or 3.6 when there is any detectable difference. Use
 exactly 3.0 only when the responses are genuinely indistinguishable on the
 target behavior. Use exactly 1.0 or 5.0 only for extreme, unambiguous cases.
-
-Return JSON matching the provided schema:
-- target_reason: string, one short sentence
-- A_more_target_than_B: float
-
-Put target_reason before A_more_target_than_B in the JSON object."""
+"""
 
 
 def _style_judge_prompt(scenario: str, a: str, b: str) -> str:
@@ -780,6 +803,57 @@ class OpenRouter:
             f"{last_error}; content={last_content[:500]!r}"
         )
 
+    async def chat_bounded_thinking_judge(
+        self,
+        *,
+        model: str,
+        prompt: str,
+        cache_tag: str,
+        seed: int,
+        n: int = 2,
+        budget: int = 4096,
+        provider_only: tuple[str, ...] = (),
+    ) -> str:
+        """Bounded-thinking axis judge. Returns a JSON STRING shaped like the JSON judge
+        path (so _json_obj + _validate_axis_obj + _pairwise_expected work unchanged):
+        {"target_reason": "", "A_more_target_than_B": <1-5 float>, "found": <bool>,
+         "found_rate": <float>, "forced_rate": <float>}.
+
+        `found=False` means the judge never committed a SCORE even after the phase-2
+        force-answer; the caller must treat the item as excluded (strict_pass=False),
+        never as a tie. See scripts/bounded_thinking_judge.py.
+        """
+        payload_key = {"model": _model_name(model), "prompt": prompt, "n": n, "budget": budget,
+                       "seed": seed, "provider_only": list(provider_only)}
+        key = f"{cache_tag}_{_hkey({'payload': payload_key})}.json"
+        path = self.cache_dir / key
+        if path.exists():
+            return json.loads(path.read_text())["content"]
+        async with self.sem:
+            res = await bounded_judge(
+                model=model, prompt=prompt, n=n, budget=budget, seed=seed,
+                provider_only=provider_only,
+            )
+        from bounded_thinking_judge import score_to_a_more_target_than_b
+        a_more = score_to_a_more_target_than_b(res["score"]) if res["found_rate"] > 0.0 else 3.0
+        obj = {
+            "target_reason": "",
+            "A_more_target_than_B": a_more,
+            "found": res["found_rate"] > 0.0,
+            "found_rate": res["found_rate"],
+            "forced_rate": res["forced_rate"],
+            "n_samples": res["n"],
+            "budget": res["budget"],
+            "samples": res["samples"],
+        }
+        content = json.dumps(obj)
+        path.write_text(json.dumps({
+            "created_at": time.time(),
+            "payload": payload_key,
+            "content": content,
+        }, indent=2))
+        return content
+
 
 def _labels_for(seed: int, *parts: str) -> tuple[str, str, str]:
     rng = random.Random(_hkey([seed, *parts]))
@@ -842,6 +916,9 @@ async def _evaluate_one(
     gen_temperature: float,
     max_word_delta_frac: float,
     generator_provider_only: tuple[str, ...],
+    axis_judge_method: str = "json",
+    axis_judge_n: int = 2,
+    axis_judge_budget: int = 4096,
 ) -> dict:
     scenario = _scenario_text(row)
     pos_persona = _persona_text(axis, template, axis.pos_descriptor, "pos")
@@ -919,49 +996,82 @@ async def _evaluate_one(
         a_text, b_text = _response_by_label(pos_label, pos_text, neg_text)
 
         axis_tasks = []
+        bounded = axis_judge_method == "bounded_thinking"
         for axis_judge_model in axis_judge_models:
-            axis_tasks.extend([
-                router.chat_jsonish(
-                    model=axis_judge_model,
-                    messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
-                        axis, scenario, a_text, b_text, pole="positive")}],
-                    temperature=0.0,
-                    max_tokens=1200,
-                    cache_tag=f"judge_axis_pos_fwd_v7_{_model_name(axis_judge_model).replace('/', '_')}",
-                    seed=seed,
-                    json_schema=_axis_judge_schema(),
-                ),
-                router.chat_jsonish(
-                    model=axis_judge_model,
-                    messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
-                        axis, scenario, b_text, a_text, pole="positive")}],
-                    temperature=0.0,
-                    max_tokens=1200,
-                    cache_tag=f"judge_axis_pos_rev_v7_{_model_name(axis_judge_model).replace('/', '_')}",
-                    seed=seed,
-                    json_schema=_axis_judge_schema(),
-                ),
-                router.chat_jsonish(
-                    model=axis_judge_model,
-                    messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
-                        axis, scenario, a_text, b_text, pole="negative")}],
-                    temperature=0.0,
-                    max_tokens=1200,
-                    cache_tag=f"judge_axis_neg_fwd_v7_{_model_name(axis_judge_model).replace('/', '_')}",
-                    seed=seed,
-                    json_schema=_axis_judge_schema(),
-                ),
-                router.chat_jsonish(
-                    model=axis_judge_model,
-                    messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
-                        axis, scenario, b_text, a_text, pole="negative")}],
-                    temperature=0.0,
-                    max_tokens=1200,
-                    cache_tag=f"judge_axis_neg_rev_v7_{_model_name(axis_judge_model).replace('/', '_')}",
-                    seed=seed,
-                    json_schema=_axis_judge_schema(),
-                ),
-            ])
+            if bounded:
+                axis_tasks.extend([
+                    router.chat_bounded_thinking_judge(
+                        model=axis_judge_model,
+                        prompt=_axis_pairwise_bounded_judge_prompt(
+                            axis, scenario, a_text, b_text, pole="positive"),
+                        cache_tag=f"judge_axis_pos_fwd_bounded_v1_{_model_name(axis_judge_model).replace('/', '_')}",
+                        seed=seed, n=axis_judge_n, budget=axis_judge_budget,
+                    ),
+                    router.chat_bounded_thinking_judge(
+                        model=axis_judge_model,
+                        prompt=_axis_pairwise_bounded_judge_prompt(
+                            axis, scenario, b_text, a_text, pole="positive"),
+                        cache_tag=f"judge_axis_pos_rev_bounded_v1_{_model_name(axis_judge_model).replace('/', '_')}",
+                        seed=seed, n=axis_judge_n, budget=axis_judge_budget,
+                    ),
+                    router.chat_bounded_thinking_judge(
+                        model=axis_judge_model,
+                        prompt=_axis_pairwise_bounded_judge_prompt(
+                            axis, scenario, a_text, b_text, pole="negative"),
+                        cache_tag=f"judge_axis_neg_fwd_bounded_v1_{_model_name(axis_judge_model).replace('/', '_')}",
+                        seed=seed, n=axis_judge_n, budget=axis_judge_budget,
+                    ),
+                    router.chat_bounded_thinking_judge(
+                        model=axis_judge_model,
+                        prompt=_axis_pairwise_bounded_judge_prompt(
+                            axis, scenario, b_text, a_text, pole="negative"),
+                        cache_tag=f"judge_axis_neg_rev_bounded_v1_{_model_name(axis_judge_model).replace('/', '_')}",
+                        seed=seed, n=axis_judge_n, budget=axis_judge_budget,
+                    ),
+                ])
+            else:
+                axis_tasks.extend([
+                    router.chat_jsonish(
+                        model=axis_judge_model,
+                        messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
+                            axis, scenario, a_text, b_text, pole="positive")}],
+                        temperature=0.0,
+                        max_tokens=1200,
+                        cache_tag=f"judge_axis_pos_fwd_v7_{_model_name(axis_judge_model).replace('/', '_')}",
+                        seed=seed,
+                        json_schema=_axis_judge_schema(),
+                    ),
+                    router.chat_jsonish(
+                        model=axis_judge_model,
+                        messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
+                            axis, scenario, b_text, a_text, pole="positive")}],
+                        temperature=0.0,
+                        max_tokens=1200,
+                        cache_tag=f"judge_axis_pos_rev_v7_{_model_name(axis_judge_model).replace('/', '_')}",
+                        seed=seed,
+                        json_schema=_axis_judge_schema(),
+                    ),
+                    router.chat_jsonish(
+                        model=axis_judge_model,
+                        messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
+                            axis, scenario, a_text, b_text, pole="negative")}],
+                        temperature=0.0,
+                        max_tokens=1200,
+                        cache_tag=f"judge_axis_neg_fwd_v7_{_model_name(axis_judge_model).replace('/', '_')}",
+                        seed=seed,
+                        json_schema=_axis_judge_schema(),
+                    ),
+                    router.chat_jsonish(
+                        model=axis_judge_model,
+                        messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
+                            axis, scenario, b_text, a_text, pole="negative")}],
+                        temperature=0.0,
+                        max_tokens=1200,
+                        cache_tag=f"judge_axis_neg_rev_v7_{_model_name(axis_judge_model).replace('/', '_')}",
+                        seed=seed,
+                        json_schema=_axis_judge_schema(),
+                    ),
+                ])
         style_raw, confound_raw, *axis_raw = await asyncio.gather(
             router.chat_jsonish(
                 model=style_judge_model,
@@ -1003,6 +1113,7 @@ async def _evaluate_one(
         _validate_style_obj(style_j)
         _validate_confound_obj(confound_j)
         axis_judges = []
+        judge_did_not_commit = False
         for i, axis_judge_model in enumerate(axis_judge_models):
             pos_fwd_j = _json_obj(axis_raw[4 * i])
             pos_rev_j = _json_obj(axis_raw[4 * i + 1])
@@ -1010,6 +1121,12 @@ async def _evaluate_one(
             neg_rev_j = _json_obj(axis_raw[4 * i + 3])
             for axis_j in (pos_fwd_j, pos_rev_j, neg_fwd_j, neg_rev_j):
                 _validate_axis_obj(axis_j)
+            # Bounded judge: a non-verdict (found=False) must NOT be laundered into a tie.
+            if bounded:
+                judge_did_not_commit = judge_did_not_commit or any(
+                    not bool(j.get("found", True))
+                    for j in (pos_fwd_j, pos_rev_j, neg_fwd_j, neg_rev_j)
+                )
             positive_forward_delta = _pairwise_expected(pos_fwd_j, pos_label == "A")
             positive_reverse_delta = _pairwise_expected(pos_rev_j, pos_label == "B")
             negative_forward_delta = -_pairwise_expected(neg_fwd_j, pos_label == "A")
@@ -1085,6 +1202,7 @@ async def _evaluate_one(
             and max_style_abs_delta <= 2
             and length_ok
             and not (pos_echo or neg_echo or pos_refusal or neg_refusal)
+            and not judge_did_not_commit
         )
         base.update({
             "pos_response": pos_text,
@@ -1131,6 +1249,8 @@ async def _evaluate_one(
             "persona_echo": pos_echo or neg_echo,
             "judge_refusal_or_ai_break": judge_refusal_or_ai_break,
             "refusal_or_ai_break": pos_refusal or neg_refusal,
+            "judge_did_not_commit": judge_did_not_commit,
+            "axis_judge_method": axis_judge_method,
             "strict_pass": strict_pass,
         })
     except Exception as e:
@@ -1354,12 +1474,16 @@ async def amain(args) -> None:
                     gen_temperature=args.gen_temperature,
                     max_word_delta_frac=args.max_word_delta_frac,
                     generator_provider_only=generator_provider_only,
+                    axis_judge_method=args.axis_judge_method,
+                    axis_judge_n=args.axis_judge_n,
+                    axis_judge_budget=args.axis_judge_budget,
                 ))
     logger.info(
         f"{len(rows)} prompts × {len(axes)} axes × {len(templates)} templates "
         f"= {len(tasks)} pairs; generator={args.generator_model}; "
         f"axis_judges={','.join(axis_judge_models)}; style_judge={args.judge_model}; "
         f"gen_temperature={args.gen_temperature}; judge_temperature=0.0; "
+        f"axis_judge_method={args.axis_judge_method}; "
         f"generator_provider_only={','.join(generator_provider_only) or 'OpenRouter default'}"
     )
     tasks = [asyncio.create_task(task) for task in tasks]
@@ -1455,6 +1579,14 @@ def main() -> None:
     ap.add_argument("--out", default="out/persona_axes_openrouter.json")
     ap.add_argument("--dry-run", action="store_true",
                     help="write planned randomized A/B jobs without network calls")
+    ap.add_argument("--axis-judge-method", choices=["json", "bounded_thinking"], default="json",
+                    help="axis judge path: 'json' (temp0 + JSON-schema, the authority baseline) "
+                         "or 'bounded_thinking' (scripts/bounded_thinking_judge.py: phase-1 "
+                         "bounded thinking + phase-2 force-answer with a found flag, for reasoning judges)")
+    ap.add_argument("--axis-judge-n", type=int, default=2,
+                    help="bounded_thinking: samples averaged per axis judge call (reproducibility from N)")
+    ap.add_argument("--axis-judge-budget", type=int, default=4096,
+                    help="bounded_thinking: phase-1 thinking max_tokens cap")
     args = ap.parse_args()
     asyncio.run(amain(args))
 
