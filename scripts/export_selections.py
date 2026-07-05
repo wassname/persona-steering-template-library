@@ -71,14 +71,18 @@ def main() -> None:
     results = d["results"]
 
     scored = []
+    skipped = 0
     for r in results:
+        if "confound_judgment" not in r:
+            skipped += 1
+            continue
         overall, strict, ad, off = recompute(r, args.axis_delta_threshold, args.off_axis_threshold, exclude)
         scored.append((overall, strict, ad, off, r))
     scored.sort(key=lambda t: t[0], reverse=True)
 
     n_strict = sum(1 for _, s, _, _, _ in scored if s)
     print(f"# {args.input}", file=sys.stderr)
-    print(f"# {len(scored)} total pairs, {n_strict} strict-pass (ax>={args.axis_delta_threshold}, off<={args.off_axis_threshold}, excl={exclude or 'none'})", file=sys.stderr)
+    print(f"# {len(scored)} valid pairs ({skipped} skipped), {n_strict} strict-pass (ax>={args.axis_delta_threshold}, off<={args.off_axis_threshold}, excl={exclude or 'none'})", file=sys.stderr)
     print(f"# top-{args.top_n} strict-pass rate: {sum(1 for _,s,_,_,_ in scored[:args.top_n] if s)}/{args.top_n}", file=sys.stderr)
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
@@ -91,6 +95,7 @@ def main() -> None:
         for r in exported:
             overall, strict, ad, off = recompute(r, args.axis_delta_threshold, args.off_axis_threshold, exclude)
             entry = {
+                "id": r["scenario_id"],
                 "scenario_id": r["scenario_id"],
                 "source": r["source"],
                 "selected_family": r["selected_family"],
