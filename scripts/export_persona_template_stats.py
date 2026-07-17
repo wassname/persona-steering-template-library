@@ -67,10 +67,9 @@ def _aggregate(rows: list[dict], keys: tuple[str, ...]) -> list[dict]:
             "mean_axis_judge_abs_disagreement": _m([
                 float(r["axis_judge_mean_abs_disagreement"]) for r in rs
             ]),
-            "mean_positive_delta": _m([float(r["positive_delta"]) for r in rs]),
-            "mean_negative_delta": _m([float(r["negative_delta"]) for r in rs]),
-            "mean_pairwise_positive_delta": _m([float(r["pairwise_positive_delta"]) for r in rs]),
-            "mean_pairwise_negative_delta": _m([float(r["pairwise_negative_delta"]) for r in rs]),
+            "mean_delta_pos_vs_base": _m([float(r["delta_pos_vs_base"]) for r in rs]),
+            "mean_delta_base_vs_neg": _m([float(r["delta_base_vs_neg"]) for r in rs]),
+            "mean_min_side_delta": _m([float(r["min_side_delta"]) for r in rs]),
             "mean_off_axis_problem": _m([
                 float(r["confound_judgment"]["off_axis_problem_likert"]) for r in rs
             ]),
@@ -127,6 +126,7 @@ def _aggregate(rows: list[dict], keys: tuple[str, ...]) -> list[dict]:
     out.sort(key=lambda r: (
         r["recommended"],
         r["strict_pass_rate"],
+        r["mean_min_side_delta"],
         r["mean_axis_delta"],
         -r["mean_off_axis_problem"],
         -r["mean_max_style_abs_delta"],
@@ -163,8 +163,9 @@ def _example_rows(rows: list[dict]) -> list[dict]:
                 "axis_delta_judge_mean": r.get("axis_delta_judge_mean"),
                 "axis_delta_judge_std": r.get("axis_delta_judge_std"),
                 "axis_judge_mean_abs_disagreement": r.get("axis_judge_mean_abs_disagreement"),
-                "positive_delta": r.get("positive_delta"),
-                "negative_delta": r.get("negative_delta"),
+                "delta_pos_vs_base": r.get("delta_pos_vs_base"),
+                "delta_base_vs_neg": r.get("delta_base_vs_neg"),
+                "min_side_delta": r.get("min_side_delta"),
                 "off_axis_problem": r["confound_judgment"].get("off_axis_problem_likert"),
                 "max_off_axis_category_likert": r.get("max_off_axis_category_likert"),
                 "usable_for_training": r["confound_judgment"].get("usable_for_training"),
@@ -186,6 +187,7 @@ def _example_rows(rows: list[dict]) -> list[dict]:
                 "neg_refusal_phrase_hits": r.get("neg_refusal_phrase_hits"),
                 "pos_response": r.get("pos_response"),
                 "neg_response": r.get("neg_response"),
+                "base_response": r.get("base_response"),
             })
             for dim, val in r.get("style_deltas_pos_minus_neg", {}).items():
                 rec[f"style_delta_{dim}_pos_minus_neg"] = val

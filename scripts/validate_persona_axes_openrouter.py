@@ -7,7 +7,11 @@ This is stricter than scripts/validate_persona_pool.py:
 * uses temperature=0 by default and sends OpenRouter's seed parameter;
 * judges the intended axis separately from style/tone nuisance dimensions;
 * loads persona axes from JSONL instead of hidden built-in presets;
-* gates examples on per-example confounds, not just mean Likert scores.
+* gates examples on per-example confounds, not just mean Likert scores;
+* anchors the axis judge to a no-persona baseline generation: each pole is judged
+  pairwise against baseline, so strict_pass requires movement in BOTH directions
+  (neg < baseline < pos), not just pos-vs-neg separation. A template where one
+  persona reproduces default behaviour fails the min_side_delta gate.
 
 Usage:
   OPENROUTER_API_KEY=... uv run python scripts/validate_persona_axes_openrouter.py \\
@@ -540,6 +544,11 @@ def _generation_prompt(
     qwen_no_think: bool = False,
 ) -> str:
     prefix = "/no_think\n" if qwen_no_think else ""
+    if not persona:
+        # No-persona baseline. Keep the persona path below byte-identical (gen cache).
+        if self_contained:
+            return f"{prefix}{scenario}\n\nOutput only the answer."
+        return f"{prefix}Scenario:\n{scenario}\n\nWhat do you do? Answer in 80-140 words. Output only the answer."
     if self_contained:
         # The scenario already carries its own question + length directive (e.g. a
         # third-person-observer vignette ending "...what does the actor do next?
@@ -897,10 +906,10 @@ def _validate_axis_obj(obj: dict) -> None:
     _bounded_score(obj, "A_more_target_than_B", 1.0, 5.0, step=0.1)
 
 
-def _pairwise_expected(obj: dict, first_is_positive: bool) -> float:
-    """Positive means the pos response beats the neg response on this target."""
+def _pairwise_expected(obj: dict, first_is_target_side: bool) -> float:
+    """Positive means the target-side response beats the other on this target behavior."""
     signed = _bounded_score(obj, "A_more_target_than_B", 1.0, 5.0, step=0.1) - 3.0
-    return signed if first_is_positive else -signed
+    return signed if first_is_target_side else -signed
 
 
 def _validate_style_obj(obj: dict) -> None:
@@ -920,22 +929,21 @@ def _validate_confound_obj(obj: dict) -> None:
 
 async def _evaluate_one(
     router: OpenRouter,
+    args,
     *,
-    generator_model: str,
-    style_judge_model: str,
-    axis_judge_models: tuple[str, ...],
     axis: Axis,
     template: str,
     row: dict,
     row_i: int,
-    seed: int,
-    gen_temperature: float,
-    max_word_delta_frac: float,
-    generator_provider_only: tuple[str, ...],
-    axis_judge_method: str = "json",
-    axis_judge_n: int = 2,
-    axis_judge_budget: int = 4096,
 ) -> dict:
+    generator_model = args.generator_model
+    style_judge_model = args.judge_model
+    axis_judge_models = args.axis_judge_models
+    seed = args.seed
+    gen_temperature = args.gen_temperature
+    max_word_delta_frac = args.max_word_delta_frac
+    generator_provider_only = args.generator_provider_only
+    axis_judge_method = args.axis_judge_method
     scenario = _scenario_text(row)
     pos_persona = _persona_text(axis, template, axis.pos_descriptor, "pos")
     neg_persona = _persona_text(axis, template, axis.neg_descriptor, "neg")
@@ -943,6 +951,8 @@ async def _evaluate_one(
     qwen_no_think = _uses_qwen_no_think(generator_model)
     pos_generation_prompt = _generation_prompt(pos_persona, scenario, self_contained, qwen_no_think)
     neg_generation_prompt = _generation_prompt(neg_persona, scenario, self_contained, qwen_no_think)
+    # No-persona baseline; template-independent, so the cache collapses it to one gen per scenario.
+    base_generation_prompt = _generation_prompt("", scenario, self_contained, qwen_no_think)
     base = {
         "eval_id": _eval_id(
             seed=seed,
@@ -966,132 +976,77 @@ async def _evaluate_one(
         "prompt": scenario,
         "pos_generation_prompt": pos_generation_prompt,
         "neg_generation_prompt": neg_generation_prompt,
+        "base_generation_prompt": base_generation_prompt,
     }
     try:
-        if pos_persona == neg_persona:
-            pos_text = await router.chat_jsonish(
+        def _gen(prompt: str, tag: str):
+            return router.chat_jsonish(
                 model=generator_model,
-                messages=[{"role": "user", "content": pos_generation_prompt}],
+                messages=[{"role": "user", "content": prompt}],
                 temperature=gen_temperature,
                 max_tokens=260,
-                cache_tag="gen_pos",
+                cache_tag=tag,
                 seed=seed,
                 json_schema=None,
                 provider_only=generator_provider_only,
             )
+
+        if pos_persona == neg_persona:
+            pos_text, base_text = await asyncio.gather(
+                _gen(pos_generation_prompt, "gen_pos"),
+                _gen(base_generation_prompt, "gen_base"),
+            )
             neg_text = pos_text
         else:
-            pos_text, neg_text = await asyncio.gather(
-                router.chat_jsonish(
-                    model=generator_model,
-                    messages=[{"role": "user", "content": pos_generation_prompt}],
-                    temperature=gen_temperature,
-                    max_tokens=260,
-                    cache_tag="gen_pos",
-                    seed=seed,
-                    json_schema=None,
-                    provider_only=generator_provider_only,
-                ),
-                router.chat_jsonish(
-                    model=generator_model,
-                    messages=[{"role": "user", "content": neg_generation_prompt}],
-                    temperature=gen_temperature,
-                    max_tokens=260,
-                    cache_tag="gen_neg",
-                    seed=seed,
-                    json_schema=None,
-                    provider_only=generator_provider_only,
-                ),
+            pos_text, neg_text, base_text = await asyncio.gather(
+                _gen(pos_generation_prompt, "gen_pos"),
+                _gen(neg_generation_prompt, "gen_neg"),
+                _gen(base_generation_prompt, "gen_base"),
             )
-        pos_text, neg_text = pos_text.strip(), neg_text.strip()
-        if not pos_text or not neg_text:
+        pos_text, neg_text, base_text = pos_text.strip(), neg_text.strip(), base_text.strip()
+        if not pos_text or not neg_text or not base_text:
             raise ValueError(
                 f"empty generation: pos_words={len(_words(pos_text))}, "
-                f"neg_words={len(_words(neg_text))}")
+                f"neg_words={len(_words(neg_text))}, base_words={len(_words(base_text))}")
         pos_label, neg_label, order = _labels_for(seed, axis.id, template, str(row_i), scenario)
         a_text, b_text = _response_by_label(pos_label, pos_text, neg_text)
 
+        # Baseline-anchored axis judging: each pole vs the no-persona baseline, both
+        # orders. A one-sided template (one persona == default behaviour) shows up as a
+        # near-zero side delta instead of hiding inside a big pos-vs-neg gap.
+        axis_pair_specs = (
+            ("pos_base", pos_text, base_text, "positive"),
+            ("neg_base", neg_text, base_text, "negative"),
+        )
         axis_tasks = []
         bounded = axis_judge_method == "bounded_thinking"
         for axis_judge_model in axis_judge_models:
-            if bounded:
-                axis_tasks.extend([
-                    router.chat_bounded_thinking_judge(
-                        model=axis_judge_model,
-                        prompt=_axis_pairwise_bounded_judge_prompt(
-                            axis, scenario, a_text, b_text, pole="positive"),
-                        cache_tag=f"judge_axis_pos_fwd_bounded_v1_{_model_name(axis_judge_model).replace('/', '_')}",
-                        seed=seed, n=axis_judge_n, budget=axis_judge_budget,
-                        provider_only=generator_provider_only,
-                    ),
-                    router.chat_bounded_thinking_judge(
-                        model=axis_judge_model,
-                        prompt=_axis_pairwise_bounded_judge_prompt(
-                            axis, scenario, b_text, a_text, pole="positive"),
-                        cache_tag=f"judge_axis_pos_rev_bounded_v1_{_model_name(axis_judge_model).replace('/', '_')}",
-                        seed=seed, n=axis_judge_n, budget=axis_judge_budget,
-                        provider_only=generator_provider_only,
-                    ),
-                    router.chat_bounded_thinking_judge(
-                        model=axis_judge_model,
-                        prompt=_axis_pairwise_bounded_judge_prompt(
-                            axis, scenario, a_text, b_text, pole="negative"),
-                        cache_tag=f"judge_axis_neg_fwd_bounded_v1_{_model_name(axis_judge_model).replace('/', '_')}",
-                        seed=seed, n=axis_judge_n, budget=axis_judge_budget,
-                        provider_only=generator_provider_only,
-                    ),
-                    router.chat_bounded_thinking_judge(
-                        model=axis_judge_model,
-                        prompt=_axis_pairwise_bounded_judge_prompt(
-                            axis, scenario, b_text, a_text, pole="negative"),
-                        cache_tag=f"judge_axis_neg_rev_bounded_v1_{_model_name(axis_judge_model).replace('/', '_')}",
-                        seed=seed, n=axis_judge_n, budget=axis_judge_budget,
-                        provider_only=generator_provider_only,
-                    ),
-                ])
-            else:
-                axis_tasks.extend([
-                    router.chat_jsonish(
-                        model=axis_judge_model,
-                        messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
-                            axis, scenario, a_text, b_text, pole="positive")}],
-                        temperature=0.0,
-                        max_tokens=1200,
-                        cache_tag=f"judge_axis_pos_fwd_v7_{_model_name(axis_judge_model).replace('/', '_')}",
-                        seed=seed,
-                        json_schema=_axis_judge_schema(),
-                    ),
-                    router.chat_jsonish(
-                        model=axis_judge_model,
-                        messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
-                            axis, scenario, b_text, a_text, pole="positive")}],
-                        temperature=0.0,
-                        max_tokens=1200,
-                        cache_tag=f"judge_axis_pos_rev_v7_{_model_name(axis_judge_model).replace('/', '_')}",
-                        seed=seed,
-                        json_schema=_axis_judge_schema(),
-                    ),
-                    router.chat_jsonish(
-                        model=axis_judge_model,
-                        messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
-                            axis, scenario, a_text, b_text, pole="negative")}],
-                        temperature=0.0,
-                        max_tokens=1200,
-                        cache_tag=f"judge_axis_neg_fwd_v7_{_model_name(axis_judge_model).replace('/', '_')}",
-                        seed=seed,
-                        json_schema=_axis_judge_schema(),
-                    ),
-                    router.chat_jsonish(
-                        model=axis_judge_model,
-                        messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
-                            axis, scenario, b_text, a_text, pole="negative")}],
-                        temperature=0.0,
-                        max_tokens=1200,
-                        cache_tag=f"judge_axis_neg_rev_v7_{_model_name(axis_judge_model).replace('/', '_')}",
-                        seed=seed,
-                        json_schema=_axis_judge_schema(),
-                    ),
-                ])
+            model_slug = _model_name(axis_judge_model).replace("/", "_")
+            for pair_name, target_text, other_text, pole in axis_pair_specs:
+                for order_name, first, second in (
+                    ("fwd", target_text, other_text),
+                    ("rev", other_text, target_text),
+                ):
+                    if bounded:
+                        axis_tasks.append(router.chat_bounded_thinking_judge(
+                            model=axis_judge_model,
+                            prompt=_axis_pairwise_bounded_judge_prompt(
+                                axis, scenario, first, second, pole=pole),
+                            cache_tag=f"judge_axis_{pair_name}_{order_name}_bounded_v1_{model_slug}",
+                            seed=seed, n=args.axis_judge_n, budget=args.axis_judge_budget,
+                            provider_only=generator_provider_only,
+                        ))
+                    else:
+                        axis_tasks.append(router.chat_jsonish(
+                            model=axis_judge_model,
+                            messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
+                                axis, scenario, first, second, pole=pole)}],
+                            temperature=0.0,
+                            max_tokens=1200,
+                            cache_tag=f"judge_axis_{pair_name}_{order_name}_v1_{model_slug}",
+                            seed=seed,
+                            json_schema=_axis_judge_schema(),
+                        ))
         style_raw, confound_raw, *axis_raw = await asyncio.gather(
             router.chat_jsonish(
                 model=style_judge_model,
@@ -1119,10 +1074,10 @@ async def _evaluate_one(
             "axis": [
                 {
                     "judge_model": axis_judge_model,
-                    "positive_forward": axis_raw[4 * i],
-                    "positive_reverse": axis_raw[4 * i + 1],
-                    "negative_forward": axis_raw[4 * i + 2],
-                    "negative_reverse": axis_raw[4 * i + 3],
+                    "pos_base_forward": axis_raw[4 * i],
+                    "pos_base_reverse": axis_raw[4 * i + 1],
+                    "neg_base_forward": axis_raw[4 * i + 2],
+                    "neg_base_reverse": axis_raw[4 * i + 3],
                 }
                 for i, axis_judge_model in enumerate(axis_judge_models)
             ],
@@ -1135,41 +1090,43 @@ async def _evaluate_one(
         axis_judges = []
         judge_did_not_commit = False
         for i, axis_judge_model in enumerate(axis_judge_models):
-            pos_fwd_j = _json_obj(axis_raw[4 * i])
-            pos_rev_j = _json_obj(axis_raw[4 * i + 1])
-            neg_fwd_j = _json_obj(axis_raw[4 * i + 2])
-            neg_rev_j = _json_obj(axis_raw[4 * i + 3])
-            for axis_j in (pos_fwd_j, pos_rev_j, neg_fwd_j, neg_rev_j):
+            pos_base_fwd_j = _json_obj(axis_raw[4 * i])
+            pos_base_rev_j = _json_obj(axis_raw[4 * i + 1])
+            neg_base_fwd_j = _json_obj(axis_raw[4 * i + 2])
+            neg_base_rev_j = _json_obj(axis_raw[4 * i + 3])
+            judgments = (pos_base_fwd_j, pos_base_rev_j, neg_base_fwd_j, neg_base_rev_j)
+            for axis_j in judgments:
                 _validate_axis_obj(axis_j)
             # Bounded judge: a non-verdict (found=False) must NOT be laundered into a tie.
             if bounded:
                 judge_did_not_commit = judge_did_not_commit or any(
-                    not bool(j.get("found", True))
-                    for j in (pos_fwd_j, pos_rev_j, neg_fwd_j, neg_rev_j)
+                    not bool(j.get("found", True)) for j in judgments
                 )
-            positive_forward_delta = _pairwise_expected(pos_fwd_j, pos_label == "A")
-            positive_reverse_delta = _pairwise_expected(pos_rev_j, pos_label == "B")
-            negative_forward_delta = -_pairwise_expected(neg_fwd_j, pos_label == "A")
-            negative_reverse_delta = -_pairwise_expected(neg_rev_j, pos_label == "B")
-            pairwise_positive_delta = (positive_forward_delta + positive_reverse_delta) / 2.0
-            pairwise_negative_delta = (negative_forward_delta + negative_reverse_delta) / 2.0
+            # Each side delta in [-2,+2]. delta_pos_vs_base > 0: pos persona above baseline
+            # on the positive behavior; delta_base_vs_neg > 0: neg persona below baseline
+            # (i.e. more negative-pole than baseline). Both > 0 means neg < baseline < pos.
+            delta_pos_vs_base = (
+                _pairwise_expected(pos_base_fwd_j, True)
+                + _pairwise_expected(pos_base_rev_j, False)
+            ) / 2.0
+            delta_base_vs_neg = (
+                _pairwise_expected(neg_base_fwd_j, True)
+                + _pairwise_expected(neg_base_rev_j, False)
+            ) / 2.0
             axis_judges.append({
                 "judge_model": axis_judge_model,
-                "positive_axis_forward_judgment": pos_fwd_j,
-                "positive_axis_reverse_judgment": pos_rev_j,
-                "negative_axis_forward_judgment": neg_fwd_j,
-                "negative_axis_reverse_judgment": neg_rev_j,
-                "positive_forward_delta": positive_forward_delta,
-                "positive_reverse_delta": positive_reverse_delta,
-                "negative_forward_delta": negative_forward_delta,
-                "negative_reverse_delta": negative_reverse_delta,
-                "pairwise_positive_delta": pairwise_positive_delta,
-                "pairwise_negative_delta": pairwise_negative_delta,
-                "axis_delta": 2.0 * (pairwise_positive_delta + pairwise_negative_delta),
+                "pos_base_forward_judgment": pos_base_fwd_j,
+                "pos_base_reverse_judgment": pos_base_rev_j,
+                "neg_base_forward_judgment": neg_base_fwd_j,
+                "neg_base_reverse_judgment": neg_base_rev_j,
+                "delta_pos_vs_base": delta_pos_vs_base,
+                "delta_base_vs_neg": delta_base_vs_neg,
+                "axis_delta": 2.0 * (delta_pos_vs_base + delta_base_vs_neg),
             })
 
-        pairwise_positive_delta = sum(j["pairwise_positive_delta"] for j in axis_judges) / len(axis_judges)
-        pairwise_negative_delta = sum(j["pairwise_negative_delta"] for j in axis_judges) / len(axis_judges)
+        delta_pos_vs_base = _mean([j["delta_pos_vs_base"] for j in axis_judges])
+        delta_base_vs_neg = _mean([j["delta_base_vs_neg"] for j in axis_judges])
+        min_side_delta = min(delta_pos_vs_base, delta_base_vs_neg)
         axis_delta_values = [j["axis_delta"] for j in axis_judges]
         axis_delta = sum(axis_delta_values) / len(axis_delta_values)
         axis_delta_judge_std = _std(axis_delta_values)
@@ -1225,6 +1182,7 @@ async def _evaluate_one(
         length_ok = True if max_word_delta_frac <= 0 else abs(word_delta_frac) <= max_word_delta_frac
         strict_pass = (
             axis_delta >= args.axis_delta_threshold
+            and min_side_delta >= args.min_side_threshold
             and off_axis_problem_likert <= args.off_axis_threshold
             and bool(confound_j["usable_for_training"])
             and max_style_abs_delta <= 2
@@ -1232,11 +1190,12 @@ async def _evaluate_one(
             and not (pos_echo or neg_echo or pos_refusal or neg_refusal)
             and not judge_did_not_commit
         )
-        # Overall score: net axis signal = on-axis movement minus off-axis contamination minus style shift.
-        # All three on ~1-7 scale. Boolean failures (echo, refusal, no-commit) get -3 each so they sort below clean rows.
-        # Use this to rank ALL scenarios and take the top N, not just strict-pass filtering.
+        # Overall score: weakest-side movement vs baseline (x4 puts it on the same [-8,8]
+        # scale as axis_delta) minus off-axis contamination minus style shift. min not sum:
+        # summing lets one big side hide a dead side, the exact failure mode we gate on.
+        # Boolean failures (echo, refusal, no-commit) get -3 each so they sort below clean rows.
         overall_score = (
-            axis_delta
+            4.0 * min_side_delta
             - off_axis_problem_likert
             - max_style_abs_delta
             - 3.0 * (pos_echo or neg_echo)
@@ -1246,6 +1205,7 @@ async def _evaluate_one(
         base.update({
             "pos_response": pos_text,
             "neg_response": neg_text,
+            "base_response": base_text,
             "blind_order": order,
             "pos_label": pos_label,
             "neg_label": neg_label,
@@ -1258,10 +1218,9 @@ async def _evaluate_one(
             "axis_judge_mean_abs_disagreement": round(axis_judge_mean_abs_disagreement, 4),
             "axis_delta_judge_mean": round(axis_delta, 4),
             "axis_delta_judge_std": round(axis_delta_judge_std, 4),
-            "positive_delta": pairwise_positive_delta,
-            "negative_delta": pairwise_negative_delta,
-            "pairwise_positive_delta": pairwise_positive_delta,
-            "pairwise_negative_delta": pairwise_negative_delta,
+            "delta_pos_vs_base": round(delta_pos_vs_base, 4),
+            "delta_base_vs_neg": round(delta_base_vs_neg, 4),
+            "min_side_delta": round(min_side_delta, 4),
             "axis_delta": round(axis_delta, 4),
             "on_axis_frac": round(max(0.0, min(1.0, axis_delta / 8.0)), 4),
             "word_pos": word_pos,
@@ -1306,7 +1265,7 @@ def _std(vals: list[float]) -> float:
     return pstdev(vals) if len(vals) > 1 else 0.0
 
 
-def summarize(results: list[dict]) -> list[dict]:
+def summarize(results: list[dict], args) -> list[dict]:
     grouped: dict[tuple[str, str], list[dict]] = defaultdict(list)
     for r in results:
         if "error" not in r:
@@ -1320,6 +1279,9 @@ def summarize(results: list[dict]) -> list[dict]:
         style_max = [float(r["max_style_abs_delta"]) for r in rows]
         word_abs = [abs(float(r["word_delta_frac"])) for r in rows]
         axis_delta = [float(r["axis_delta"]) for r in rows]
+        pos_side = [float(r["delta_pos_vs_base"]) for r in rows]
+        neg_side = [float(r["delta_base_vs_neg"]) for r in rows]
+        min_side = [float(r["min_side_delta"]) for r in rows]
         axis_delta_judge_std = [float(r["axis_delta_judge_std"]) for r in rows]
         echo = sum(bool(r["persona_echo"]) for r in rows) / n
         refusal = sum(bool(r["refusal_or_ai_break"]) for r in rows) / n
@@ -1330,6 +1292,9 @@ def summarize(results: list[dict]) -> list[dict]:
             "n": n,
             "strict_pass_rate": round(pass_rate, 3),
             "mean_axis_delta": round(_mean(axis_delta), 3),
+            "mean_delta_pos_vs_base": round(_mean(pos_side), 3),
+            "mean_delta_base_vs_neg": round(_mean(neg_side), 3),
+            "mean_min_side_delta": round(_mean(min_side), 3),
             "mean_axis_delta_judge_std": round(_mean(axis_delta_judge_std), 3),
             "mean_overall_score": round(_mean(scores), 3),
             "mean_off_axis_problem": round(_mean(off), 3),
@@ -1342,6 +1307,7 @@ def summarize(results: list[dict]) -> list[dict]:
                 n >= 3
                 and pass_rate >= 0.8
                 and _mean(axis_delta) >= args.axis_delta_threshold
+                and _mean(min_side) >= args.min_side_threshold
                 and _mean(off) <= 2
                 and _mean(style_max) <= 2
                 and echo == 0
@@ -1351,6 +1317,7 @@ def summarize(results: list[dict]) -> list[dict]:
     out.sort(key=lambda r: (
         r["recommended"],
         r["strict_pass_rate"],
+        r["mean_min_side_delta"],
         r["mean_axis_delta"],
         -r["mean_off_axis_problem"],
         -r["mean_max_style_abs_delta"],
@@ -1366,10 +1333,10 @@ def axis_score_distribution(results: list[dict]) -> list[dict]:
         for judgment in r["axis_judgments"]:
             judge_model = judgment["judge_model"]
             for key in (
-                "positive_axis_forward_judgment",
-                "positive_axis_reverse_judgment",
-                "negative_axis_forward_judgment",
-                "negative_axis_reverse_judgment",
+                "pos_base_forward_judgment",
+                "pos_base_reverse_judgment",
+                "neg_base_forward_judgment",
+                "neg_base_reverse_judgment",
             ):
                 score = _bounded_score(judgment[key], "A_more_target_than_B", 1.0, 5.0, step=0.1)
                 counts[(judge_model, key.removesuffix("_judgment"), score)] += 1
@@ -1397,8 +1364,10 @@ def print_judge_audit_samples(results: list[dict]) -> None:
         _print_text_block("prompt", str(rec.get("prompt", "")))
         _print_text_block("pos_generation_prompt", str(rec.get("pos_generation_prompt", "")))
         _print_text_block("neg_generation_prompt", str(rec.get("neg_generation_prompt", "")))
+        _print_text_block("base_generation_prompt", str(rec.get("base_generation_prompt", "")))
         _print_text_block("cho_pos_response", str(rec.get("pos_response", "")))
         _print_text_block("rej_neg_response", str(rec.get("neg_response", "")))
+        _print_text_block("base_response", str(rec.get("base_response", "")))
         _print_text_block(
             "deterministic_audit_hits",
             json.dumps({
@@ -1434,6 +1403,9 @@ async def amain(args) -> None:
     generator_provider_only = tuple(
         provider.strip() for provider in args.generator_provider_only.split(",") if provider.strip()
     )
+    # _evaluate_one and summarize read these off args.
+    args.axis_judge_models = axis_judge_models
+    args.generator_provider_only = generator_provider_only
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1504,21 +1476,7 @@ async def amain(args) -> None:
         for axis in axes:
             for template in templates:
                 tasks.append(_evaluate_one(
-                    router,
-                    generator_model=args.generator_model,
-                    style_judge_model=args.judge_model,
-                    axis_judge_models=axis_judge_models,
-                    axis=axis,
-                    template=template,
-                    row=row,
-                    row_i=row_i,
-                    seed=args.seed,
-                    gen_temperature=args.gen_temperature,
-                    max_word_delta_frac=args.max_word_delta_frac,
-                    generator_provider_only=generator_provider_only,
-                    axis_judge_method=args.axis_judge_method,
-                    axis_judge_n=args.axis_judge_n,
-                    axis_judge_budget=args.axis_judge_budget,
+                    router, args, axis=axis, template=template, row=row, row_i=row_i,
                 ))
     logger.info(
         f"{len(rows)} prompts × {len(axes)} axes × {len(templates)} templates "
@@ -1551,13 +1509,13 @@ async def amain(args) -> None:
             "n_results": len(results),
             "n_success": sum("error" not in r for r in results),
             "n_errors": sum("error" in r for r in results),
-            "summary": summarize(results),
+            "summary": summarize(results, args),
             "axis_score_distribution": axis_score_distribution(results),
             "results": results,
         }
         out.write_text(json.dumps(artifact, indent=2))
 
-    summary = summarize(results)
+    summary = summarize(results, args)
     artifact = {
         "dry_run": False,
         "generator_model": args.generator_model,
@@ -1611,8 +1569,13 @@ def main() -> None:
                     help="stratified sampling: take this many scenarios from EACH family (overrides --n). "
                          "Use this so each source contributes equally, not proportional to its size.")
     ap.add_argument("--axis-delta-threshold", type=float, default=3.0,
-                    help="minimum axis_delta (1-7 Likert) for strict_pass. Default 3.0 (authority-calibrated). "
-                         "Lower to 2.0 for hard-to-steer axes where 3.0 yields too few strict-pass scenarios.")
+                    help="minimum axis_delta = 2*(delta_pos_vs_base + delta_base_vs_neg), range [-8,+8], "
+                         "for strict_pass. Default 3.0. Lower to 2.0 for hard-to-steer axes.")
+    ap.add_argument("--min-side-threshold", type=float, default=0.5,
+                    help="minimum per-side movement vs the no-persona baseline (each side in [-2,+2]) for "
+                         "strict_pass. Gates neg < baseline < pos so a template where one persona just "
+                         "reproduces default behaviour fails. Calibrate from the run's per-side distribution; "
+                         "keep small: the default model often sits near one pole, so symmetric demands kill everything.")
     ap.add_argument("--exclude-confound-dims", type=str, default="",
                     help="comma-separated confound dims to EXCLUDE from the off-axis gate (recompute max from remaining). "
                          "Use for on-axis dims that circularly penalize the axis being steered, e.g. "
