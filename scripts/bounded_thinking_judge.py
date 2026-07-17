@@ -177,11 +177,6 @@ async def judge(
     }
 
 
-# SCORE convention for the axis pairwise judge: positive = A more target-like than B.
-# The validator maps this to its 1..5 A_more_target_than_B field as 3.0 + 0.4*SCORE.
-SCORE_TO_LIKERT = 3.0 + 0.4  # per unit of SCORE on [-5,+5] -> [1.0, 5.0]
-
-
 def score_to_a_more_target_than_b(score: int) -> float:
     """Map a bounded-judge SCORE in [-5,+5] to the validator's 1..5
     A_more_target_than_B scale (3.0 = tied)."""

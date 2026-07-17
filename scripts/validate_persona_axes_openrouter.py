@@ -1206,6 +1206,8 @@ async def _evaluate_one(
             "pos_response": pos_text,
             "neg_response": neg_text,
             "base_response": base_text,
+            # control condition: pos==neg persona, so style/confound deltas are trivially clean
+            "control_pair": pos_persona == neg_persona,
             "blind_order": order,
             "pos_label": pos_label,
             "neg_label": neg_label,
@@ -1237,6 +1239,8 @@ async def _evaluate_one(
             "max_style_abs_delta": max_style_abs_delta,
             "off_axis_category_likerts": off_axis_likerts,
             "max_off_axis_category_likert": max_off_axis_category_likert,
+            # the value strict_pass/overall_score actually gate on (respects --exclude-confound-dims)
+            "off_axis_problem_likert_gate": off_axis_problem_likert,
             "off_axis_problem_frac": round(
                 _normalize_likert(float(confound_j["off_axis_problem_likert"]), 1.0, 7.0), 4),
             "pos_refusal_phrase_hits": pos_refusal_phrase_hits,
@@ -1274,7 +1278,7 @@ def summarize(results: list[dict], args) -> list[dict]:
     for (axis_id, template), rows in grouped.items():
         n = len(rows)
         pass_rate = sum(bool(r["strict_pass"]) for r in rows) / n
-        off = [float(r["confound_judgment"]["off_axis_problem_likert"]) for r in rows]
+        off = [float(r["off_axis_problem_likert_gate"]) for r in rows]
         off_cat_max = [float(r.get("max_off_axis_category_likert", 7)) for r in rows]
         style_max = [float(r["max_style_abs_delta"]) for r in rows]
         word_abs = [abs(float(r["word_delta_frac"])) for r in rows]
@@ -1308,7 +1312,7 @@ def summarize(results: list[dict], args) -> list[dict]:
                 and pass_rate >= 0.8
                 and _mean(axis_delta) >= args.axis_delta_threshold
                 and _mean(min_side) >= args.min_side_threshold
-                and _mean(off) <= 2
+                and _mean(off) <= args.off_axis_threshold
                 and _mean(style_max) <= 2
                 and echo == 0
                 and refusal == 0
