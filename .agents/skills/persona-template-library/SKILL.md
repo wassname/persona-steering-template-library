@@ -54,7 +54,9 @@ Use the repo in this order:
    Stage A, test the full catalog when budget permits. If budget is constrained,
    start from the top Results Snapshot scorers plus any strong templates that
    plausibly fit the new axis. Use a deterministic top-N rule when you
-   downsample; do not use a small hand-picked subset.
+   downsample; do not use a small hand-picked subset. Note the Results Snapshot
+   predates the both-directions check; when a Stage A artifact with per-side
+   deltas exists for your axis, rank with `scripts/parse_stage_a.py` instead.
 2. Choose persona pairs with `docs/choosing_personas.md`. Mirror-test each pair:
    every positive clause needs a negative counterpart that only flips the
    intended pole.
@@ -80,7 +82,10 @@ Use the repo in this order:
 5. For a steering-ready selection, use a two-stage screen:
    Stage A = broad template evidence on a small source-diverse panel (ALL templates x FEW scenarios, e.g. 100 templates x 1/source); Stage B = the chosen winner/template on MANY axis-affordance-ranked scenarios (1 template x ~1000 scenarios). This cost structure is deliberate: 100x12 + 1x1000 << 100x1000, so test all templates cheaply first, then spend scenarios on the winner only. Run Stage A per-axis (one axis at a time), not as a cross-product of all axes x all templates -- persona axes are mostly orthogonal, so the combinatorial cost is unnecessary. For N axes you run N Stage A passes (one template winner each), then N Stage B passes, not N^2.
    For Stage A, copy an existing `scripts/run_*_stage_a_strat.sh` for the new axis
-   and rank the artifact with `scripts/parse_stage_a.py`.
+   and rank the artifact with `scripts/parse_stage_a.py`. In its table, `pos_d` and
+   `neg_d` are each persona's movement vs a no-persona answer (-2..+2): keep
+   templates where BOTH are >= ~0.4. A side near 0 means that persona just
+   reproduces the default model, so the pair cannot steer in that direction.
    Before Stage B, write or adapt a prepare script like
    `scripts/prepare_authority_steering_selection.py` for the new axis. Random
    scenario sampling is insufficient for narrow axes because most scenarios will
@@ -88,7 +93,9 @@ Use the repo in this order:
    source contributes N scenarios equally, not proportional to source size; the
    legacy `--n` pools all sources and samples N total (large sources dominate).
 6. Export with `scripts/export_selections.py` (`--strict-only`, or `--top-n` by
-   overall_score when strict rows are scarce). If Stage B gets 0 strict-pass scenarios,
+   overall_score when strict rows are scarce; pass the same thresholds as the run).
+   Strict rows are rare (~0.2-2%), mostly killed by the judge's usable-for-training
+   call; that is normal. If Stage B gets 0 strict-pass scenarios,
    test more ranked scenarios (`--n-per-source 50+`, more sources) and/or try
    stronger templates (the full catalog includes system-prompt, red-team, and
    jailbreak-style templates that break the model out of its default stance).
@@ -110,38 +117,9 @@ just pages
 
 The steering arithmetic matters: a direction is the average positive-minus-
 negative difference. Any systematic length, refusal, formality, confidence,
-language, or persona-label difference can become the axis.
-
-## Metrics and gates (read before interpreting any run)
-
-The validator judges each pole pairwise against a NO-PERSONA baseline generation,
-not just pos-vs-neg. A steering pair used at -C and +C must move the model in BOTH
-directions from default behaviour (neg < baseline < pos); a template where one
-persona just reproduces the default is a bad pair even if pos-vs-neg separation
-looks large.
-
-Per row:
-
-- `delta_pos_vs_base`, `delta_base_vs_neg`: per-side movement, each in [-2,+2].
-  Positive = that pole moved away from baseline in its intended direction.
-- `min_side_delta = min(side deltas)`: the weakest side. Rank on this, never on the
-  sum: summing lets one big side hide a dead side.
-- `axis_delta = 2*(delta_pos_vs_base + delta_base_vs_neg)`, in [-8,+8]: total separation.
-- `strict_pass` = axis_delta >= 3.0 AND min_side_delta >= 0.5 AND off-axis <= 2.0
-  AND judge says usable_for_training AND style delta <= 2 AND no persona echo,
-  refusal, or judge non-commit. Thresholds are flags (`--axis-delta-threshold`,
-  `--min-side-threshold`, `--off-axis-threshold`).
-- `overall_score = 4*min_side_delta - off_axis - style - 3*each boolean failure`:
-  use to rank all rows for top-N export when strict rows are scarce.
-
-What normal looks like (calibration from honesty/credulity Stage A, qwen3-14b):
-
-- A good template moves each side ~+0.4 to +0.7; near 0.0 on one side = one-sided,
-  reject. Roughly symmetric sides are better than one big side.
-- Strict rows are RARE (~0.2-2% of pairs). The binding gate is usually the confound
-  judge's `usable_for_training`, not the axis gates. 0 strict on a small panel is
-  normal; 0 strict on a full Stage B means test more ranked scenarios or stronger
-  templates, never relax the gate.
+language, or persona-label difference can become the axis. And the pair is used
+at both -C and +C, so both personas must move the model away from its default
+answer, not just away from each other.
 - Rank templates with `scripts/parse_stage_a.py <artifact>`: strict_pass_rate, then
   min_side_delta, then axis_delta.
 - Expect asymmetry by axis: the RLHF default often sits near one pole (e.g. already
