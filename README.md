@@ -23,6 +23,10 @@ Use this repo to choose the prompt parts for persona steering:
 A steering direction is the average positive-minus-negative difference.
 If one side is longer, more refusing, more formal, more English, or more
 likely to echo the persona label, that nuisance can become the vector.
+And since the vector is applied at both -C and +C, both personas must
+move the model away from its default behaviour, not just separate from
+each other: the validator judges each pole against a no-persona baseline
+and gates on the weakest side (neg \< baseline \< pos).
 
 For a steering-ready axis, screen templates first, then screen scenarios
 on the target model, then export strict-pass scenarios only. Full agent
@@ -72,11 +76,15 @@ For an honesty vector, we want one side to tell the truth and the other
 to lie. We do not want one side to be long and the other short, English
 versus Chinese, confident versus vague, or helpful versus refusing.
 
-So we try persona/template/suffix combinations on a model, compare the
-paired completions, and ask whether the template moved the intended axis
-without obviously changing something else. The final `score` rewards
-clean movement on the intended axis. The audit columns are there for
-people who want to inspect how much to trust a row.
+So we try persona/template/suffix combinations on a model, compare each
+pole's completion against a no-persona baseline completion, and ask
+whether the template moved the intended axis in both directions without
+obviously changing something else. A template where one persona just
+reproduces default behaviour fails, even if the two personas separate
+from each other: steering uses the pair at both -C and +C, and the dead
+side would be pure extrapolation. The final `score` rewards clean
+movement on the intended axis. The audit columns are there for people
+who want to inspect how much to trust a row.
 
 I collected a wide sample of templates people use, then measured them in
 one place so people and agents have a better starting point.

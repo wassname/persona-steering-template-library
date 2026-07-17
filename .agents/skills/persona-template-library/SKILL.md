@@ -28,6 +28,12 @@ dataset.
 - `data/results/`: committed result tables and reader-facing result assets.
 - `out/`: local scratch outputs and API caches; ignored by git.
 - `scripts/validate_persona_axes_openrouter.py`: live and dry-run validator.
+- `scripts/run_*_stage_a_strat.sh`: canonical Stage A invocations (models, judges,
+  scenario panel). Copy one of these for a new axis; do not re-derive flags.
+- `scripts/parse_stage_a.py`: rank Stage A templates by strict_pass_rate, then
+  min_side_delta, then axis_delta; prints per-side deltas.
+- `scripts/export_selections.py`: export top-N/strict-pass rows from a Stage B
+  artifact. Mirrors the validator's gates exactly; do not re-implement them.
 - `scripts/prepare_authority_steering_selection.py`: source-stratified Stage A/Stage B
   authority-axis selection inputs.
 - `scripts/export_authority_steering_selection.py`: exports the chosen axis/template
@@ -56,16 +62,33 @@ Use the repo in this order:
    `scripts/validate_persona_axes_openrouter.py`. Keep suffixes that elicit the
    behavior mode you need: doing, judging, explaining, refusing, moral tradeoffs,
    or multi-turn behavior.
-4. Run a dry-run validator command before live OpenRouter calls.
+4. Run a dry-run validator command before live OpenRouter calls. Then run a live
+   smoke test (1 scenario x 2 templates x 1 axis, ~cents) before any 1000+ pair
+   run, and read the printed FIRST/LAST audit samples: pos/neg/base responses
+   should differ in the intended way, and both side deltas should be populated.
+
+   ```sh
+   uv run python scripts/validate_persona_axes_openrouter.py \
+     --generator-model qwen/qwen3-14b --generator-provider-only DeepInfra \
+     --judge-model google/gemini-3.1-flash-lite-preview \
+     --axis-judge-models qwen/qwen3-14b --axis-judge-method bounded_thinking \
+     --axes data/personas/persona_pairs_<axis>.jsonl \
+     --templates 'You are {persona}.||Act as if you are extremely {persona}.' \
+     --family data/scenarios/scenarios_daily_dilemmas.jsonl \
+     --n-per-source 1 --seed 13 --out out/smoke_<axis>.json
+   ```
 5. For a steering-ready selection, use a two-stage screen:
    Stage A = broad template evidence on a small source-diverse panel (ALL templates x FEW scenarios, e.g. 100 templates x 1/source); Stage B = the chosen winner/template on MANY axis-affordance-ranked scenarios (1 template x ~1000 scenarios). This cost structure is deliberate: 100x12 + 1x1000 << 100x1000, so test all templates cheaply first, then spend scenarios on the winner only. Run Stage A per-axis (one axis at a time), not as a cross-product of all axes x all templates -- persona axes are mostly orthogonal, so the combinatorial cost is unnecessary. For N axes you run N Stage A passes (one template winner each), then N Stage B passes, not N^2.
+   For Stage A, copy an existing `scripts/run_*_stage_a_strat.sh` for the new axis
+   and rank the artifact with `scripts/parse_stage_a.py`.
    Before Stage B, write or adapt a prepare script like
    `scripts/prepare_authority_steering_selection.py` for the new axis. Random
    scenario sampling is insufficient for narrow axes because most scenarios will
    not afford the intended behavior. Use `--n-per-source N` (stratified) so each
    source contributes N scenarios equally, not proportional to source size; the
    legacy `--n` pools all sources and samples N total (large sources dominate).
-6. Export strict-pass scenarios only. If Stage B gets 0 strict-pass scenarios,
+6. Export with `scripts/export_selections.py` (`--strict-only`, or `--top-n` by
+   overall_score when strict rows are scarce). If Stage B gets 0 strict-pass scenarios,
    test more ranked scenarios (`--n-per-source 50+`, more sources) and/or try
    stronger templates (the full catalog includes system-prompt, red-team, and
    jailbreak-style templates that break the model out of its default stance).
@@ -88,6 +111,42 @@ just pages
 The steering arithmetic matters: a direction is the average positive-minus-
 negative difference. Any systematic length, refusal, formality, confidence,
 language, or persona-label difference can become the axis.
+
+## Metrics and gates (read before interpreting any run)
+
+The validator judges each pole pairwise against a NO-PERSONA baseline generation,
+not just pos-vs-neg. A steering pair used at -C and +C must move the model in BOTH
+directions from default behaviour (neg < baseline < pos); a template where one
+persona just reproduces the default is a bad pair even if pos-vs-neg separation
+looks large.
+
+Per row:
+
+- `delta_pos_vs_base`, `delta_base_vs_neg`: per-side movement, each in [-2,+2].
+  Positive = that pole moved away from baseline in its intended direction.
+- `min_side_delta = min(side deltas)`: the weakest side. Rank on this, never on the
+  sum: summing lets one big side hide a dead side.
+- `axis_delta = 2*(delta_pos_vs_base + delta_base_vs_neg)`, in [-8,+8]: total separation.
+- `strict_pass` = axis_delta >= 3.0 AND min_side_delta >= 0.5 AND off-axis <= 2.0
+  AND judge says usable_for_training AND style delta <= 2 AND no persona echo,
+  refusal, or judge non-commit. Thresholds are flags (`--axis-delta-threshold`,
+  `--min-side-threshold`, `--off-axis-threshold`).
+- `overall_score = 4*min_side_delta - off_axis - style - 3*each boolean failure`:
+  use to rank all rows for top-N export when strict rows are scarce.
+
+What normal looks like (calibration from honesty/credulity Stage A, qwen3-14b):
+
+- A good template moves each side ~+0.4 to +0.7; near 0.0 on one side = one-sided,
+  reject. Roughly symmetric sides are better than one big side.
+- Strict rows are RARE (~0.2-2% of pairs). The binding gate is usually the confound
+  judge's `usable_for_training`, not the axis gates. 0 strict on a small panel is
+  normal; 0 strict on a full Stage B means test more ranked scenarios or stronger
+  templates, never relax the gate.
+- Rank templates with `scripts/parse_stage_a.py <artifact>`: strict_pass_rate, then
+  min_side_delta, then axis_delta.
+- Expect asymmetry by axis: the RLHF default often sits near one pole (e.g. already
+  honest/skeptical), so one side has less room. That is why the per-side gate is
+  0.5, not a symmetric demand.
 
 ## Commands
 
