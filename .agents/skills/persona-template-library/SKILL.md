@@ -120,11 +120,6 @@ negative difference. Any systematic length, refusal, formality, confidence,
 language, or persona-label difference can become the axis. And the pair is used
 at both -C and +C, so both personas must move the model away from its default
 answer, not just away from each other.
-- Rank templates with `scripts/parse_stage_a.py <artifact>`: strict_pass_rate, then
-  min_side_delta, then axis_delta.
-- Expect asymmetry by axis: the RLHF default often sits near one pole (e.g. already
-  honest/skeptical), so one side has less room. That is why the per-side gate is
-  0.5, not a symmetric demand.
 
 ## Commands
 
