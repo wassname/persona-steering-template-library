@@ -82,10 +82,11 @@ Use the repo in this order:
 5. For a steering-ready selection, use a two-stage screen:
    Stage A = broad template evidence on a small source-diverse panel (ALL templates x FEW scenarios, e.g. 100 templates x 1/source); Stage B = the chosen winner/template on MANY axis-affordance-ranked scenarios (1 template x ~1000 scenarios). This cost structure is deliberate: 100x12 + 1x1000 << 100x1000, so test all templates cheaply first, then spend scenarios on the winner only. Run Stage A per-axis (one axis at a time), not as a cross-product of all axes x all templates -- persona axes are mostly orthogonal, so the combinatorial cost is unnecessary. For N axes you run N Stage A passes (one template winner each), then N Stage B passes, not N^2.
    For Stage A, copy an existing `scripts/run_*_stage_a_strat.sh` for the new axis
-   and rank the artifact with `scripts/parse_stage_a.py`. In its table, `pos_d` and
-   `neg_d` are each persona's movement vs a no-persona answer (-2..+2): keep
-   templates where BOTH are >= ~0.4. A side near 0 means that persona just
-   reproduces the default model, so the pair cannot steer in that direction.
+   and rank the artifact with `scripts/parse_stage_a.py`. `pos_d` and `neg_d` are
+   each persona's movement vs a no-persona answer (-2..+2); rank by `min_side` and
+   prefer templates where both move. A side near 0 is dead (that persona just
+   reproduces the default). The pass bar `--min-side-threshold` (default 0.5) is
+   per-axis; some axes top out below it when the default already sits near one pole.
    Before Stage B, write or adapt a prepare script like
    `scripts/prepare_authority_steering_selection.py` for the new axis. Random
    scenario sampling is insufficient for narrow axes because most scenarios will

@@ -147,20 +147,16 @@ For source-stratified authority selection, use
 and
 [`scripts/export_authority_steering_selection.py`](scripts/export_authority_steering_selection.py).
 
-Score:
+The plot above is the earlier pilot metric,
+`score = 100 * on_axis * (1 - off_axis)`, where `on_axis` is pos-vs-neg
+movement and `off_axis` is how confounded the comparison looks (0 clean,
+1 confounded). Style, persona echo, and refusals stay as audit columns,
+not folded in.
 
-``` text
-score = 100 * on_axis * (1 - off_axis)
-```
-
-`on_axis` is the measured movement on the intended axis. `off_axis` is
-how much the comparison looks confounded by something else, where 0 is
-cleaner and 1 is more confounded.
-
-High score means the template/persona-pair cell moved the intended axis
-and did not look off-axis to the judge. Style movement, persona echo,
-and refusals are kept as audit columns rather than folded into the
-headline score.
+The current Stage A screen is stricter: it judges each pole against a
+no-persona baseline and gates on the weaker side (`min_side`), so a
+template wins only if both personas move the model off its default, not
+just apart from each other.
 
 Provenance:
 
