@@ -17,7 +17,7 @@ Use this repo to choose the prompt parts for persona steering:
 | choice | use |
 |----|----|
 | persona templates | Start with the top Results table, the Hugging Face `main` split, or [`data/templates/template_catalog.yaml`](data/templates/template_catalog.yaml). |
-| persona pairs | Use the local [`persona-template-library` skill](.agents/skills/persona-template-library/SKILL.md) and [`docs/choosing_personas.md`](docs/choosing_personas.md) to write mirrored positive/negative poles. |
+| persona pairs | Use the local [`persona-steering-template-library` skill](SKILL.md) and [`docs/choosing_personas.md`](docs/choosing_personas.md) to write mirrored positive/negative poles. |
 | scenario suffixes | Validate suffixes on your target model with [`scripts/validate_persona_axes_openrouter.py`](scripts/validate_persona_axes_openrouter.py). |
 
 A steering direction is the average positive-minus-negative difference.
@@ -30,8 +30,8 @@ and gates on the weakest side (neg \< baseline \< pos).
 
 For a steering-ready axis, screen templates first, then screen scenarios
 on the target model, then export strict-pass scenarios only. Full agent
-recipe: [`persona-template-library`
-skill](.agents/skills/persona-template-library/SKILL.md). Stage A should
+recipe: [`persona-steering-template-library`
+skill](SKILL.md). Stage A should
 test the full template catalog when budget permits. If budget is
 constrained, use a deterministic top-N rule from the Results Snapshot
 plus any strong templates that plausibly fit the new axis. Do not use a
