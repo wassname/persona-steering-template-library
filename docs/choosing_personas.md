@@ -12,7 +12,7 @@ style, length, refusal posture, and task mode as matched as possible.
 
 ## What To Use
 
-- `README.md`: headline results and the current plot.
+- `README.md`: short introduction and previous template results.
 - `data/templates/template_catalog.yaml`: canonical reusable templates.
 - `data/personas/persona_pairs_pilot_two.jsonl`: measured pilot pairs.
 - `data/personas/persona_pairs_v2_candidates.jsonl`: candidate pairs not necessarily in
@@ -42,11 +42,6 @@ source types and examples:
 Use this ordering when sources disagree: working code and repeated external use,
 then paper claims, then in-house iteration notes.
 
-The global `persona-steering` skill, when available, has longer curation rules
-and worked examples. The source-by-source prompt-practice appendix now travels
-with this repo in
-[`docs/persona_prompt_literature_review.md`](persona_prompt_literature_review.md).
-
 ## Pick a persona pair
 
 Prefer pairs that are short, mirrored, and enactable.
@@ -64,7 +59,7 @@ sentences side by side and ask whether every clause has a counterpart that only
 flips the intended pole. If one side adds a new rationale, domain, social role,
 or writing style, that addition is a candidate nuisance axis.
 
-Examples from the existing persona-steering skill:
+Examples:
 
 ```text
 pos: You prioritize people over orders that would sacrifice them.
@@ -124,49 +119,11 @@ Useful audit columns:
 Use `examples` to decide whether a row is real. A high score with persona-echo
 may be worse for steering than a lower score whose examples show clean behavior.
 
-## Validate a new pair or template
+## Validate the pair
 
-Dry-run first. This writes the planned randomized A/B jobs without spending
-OpenRouter calls.
-
-```sh
-uv run python scripts/validate_persona_axes_openrouter.py \
-  --axes data/personas/persona_pairs_pilot_two.jsonl \
-  --templates data/templates/template_catalog.yaml \
-  --family data/scenarios/scenarios_v2_candidates.jsonl \
-  --n 1 \
-  --seed 24 \
-  --dry-run \
-  --out out/persona_template_library_dryrun.json
-```
-
-Then run a small live validation.
-
-```sh
-OPENROUTER_API_KEY=... uv run python scripts/validate_persona_axes_openrouter.py \
-  --axes data/personas/persona_pairs_pilot_two.jsonl \
-  --templates data/templates/template_catalog.yaml \
-  --family data/scenarios/scenarios_v2_candidates.jsonl \
-  --n 2 \
-  --seed 24 \
-  --out out/persona_template_library_v2_pilot_seed24.json
-```
-
-Export stats from the live artifact.
-
-```sh
-uv run python scripts/export_persona_template_stats.py \
-  out/persona_template_library_v2_pilot_seed24.json \
-  --out-prefix data/results/stats/v2_pilot_seed24
-```
-
-Refresh the rendered README and GitHub Pages site when the committed stats
-change.
-
-```sh
-just readme
-just pages
-```
+Follow the scenario-first procedure in [`SKILL.md`](../SKILL.md#procedure). The
+scenario screen is the first empirical check that the pair produces its named
+behavior on the target model. Template validation comes after 50 scenarios pass.
 
 ## Accept Or Drop
 
