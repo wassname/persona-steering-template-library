@@ -44,6 +44,19 @@ Have your agent read [`SKILL.md`](SKILL.md), then ask:
 
 > Use `$persona-steering-template-library` to find validated steering ingredients for `PERSONA_OR_BEHAVIOR` on `TARGET_MODEL`. Return one persona pair, the top 50 scenarios, and one template.
 
+The canonical evaluator is [`scripts/validate_persona_axes.py`](scripts/validate_persona_axes.py). It writes two complementary artifacts:
+
+- `--out ...json` is the complete validation result consumed by the selection and ranking scripts.
+- `--log-dir ...` receives an Inspect `.eval` log containing the prompts, responses, judge calls, scores, token usage, and errors. The result JSON records its path as `inspect_log`.
+
+Persona pairs and scenario collections remain JSONL. [`scripts/export_selections.py`](scripts/export_selections.py) reads the validation JSON and writes the selected scenarios as JSONL; Inspect does not replace these interchange formats. View completed eval logs with:
+
+```sh
+uv run inspect view --log-dir out/inspect/persona_axes
+```
+
+See [`SKILL.md`](SKILL.md) for the dry-run, live screen, export, and template-ranking commands.
+
 ## Previous results
 
 These were the best reusable templates in an earlier pilot. Higher is better, but validate them again on your target model.
