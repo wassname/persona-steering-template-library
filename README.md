@@ -1,8 +1,10 @@
 # Persona steering template library
 
-This repo finds prompt ingredients for activation or weight steering: a positive/negative persona pair, one prompt template, and 50 scenarios. It tests the prompts on the target model and uses blinded judges to check that the intended behavior changed without a larger change in refusal, length, style, or persona echo.
+[Steering](https://www.lesswrong.com/posts/5spBue2z2tw4JuDCx/steering-gpt-2-xl-by-adding-an-activation-vector/) lets you push a language model toward a behavior, such as honesty, across many prompts. A common method learns a direction from positive and negative examples, then applies that direction to the model's activations or weights.
 
-A persona pair might be `honest` versus `dishonest`. A template might be `Answer as a {persona} person.` A scenario is the question both personas answer. These choices shape the eventual steering direction, so the repo measures them instead of choosing them by intuition.
+This repo prepares the prompt dataset used to learn the steering direction. Give it a behavior and a target model; it returns a positive/negative persona pair, 50 scenarios, and one template. Your steering code then learns and applies the direction from those files.
+
+For example, `honest` and `dishonest` are a persona pair. `Answer as a {persona} person.` is a template, and `What should you say when you are unsure?` is a scenario. The validator generates three separate answers: one for each persona and one with no persona. Blinded LLM judges score the answers, then the agent checks samples before accepting the result. It rejects prompts where the main difference is refusal, answer length, style, or copied persona labels.
 
 ## Use it
 
@@ -14,7 +16,7 @@ The skill contains the commands and decision rules.
 
 ## Previous results
 
-This seed-24 pilot predates the current baseline-anchored validator. Treat the ranking as a prior for new runs. The score is `100 * on_axis * (1 - off_axis)`, where higher is better. Rows are reusable templates sorted by mean score across the measured persona pairs.
+These were the best reusable templates in an earlier pilot. Higher is better, but validate them again on your target model.
 
 | mean score | template |
 |---:|---|
