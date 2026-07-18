@@ -1,4 +1,4 @@
-"""Write the canonical README/Page Plotly figure as PNG and SVG."""
+"""Write the previous-results Plotly figure as PNG and SVG."""
 from __future__ import annotations
 
 import readme_plot
