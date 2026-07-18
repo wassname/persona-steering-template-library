@@ -1,8 +1,8 @@
-"""Direct OpenRouter persona-axis validation with blinded A/B judging.
+"""Inspect AI persona-axis evaluation with blinded A/B judging.
 
 This is stricter than scripts/validate_persona_pool.py:
 
-* calls OpenRouter directly through the OpenAI client, not inspect-ai or pi;
+* records every generation and judgment in an Inspect ``.eval`` log;
 * randomizes response order before every judge call;
 * uses temperature=0 by default and sends OpenRouter's seed parameter;
 * judges the intended axis separately from style/tone nuisance dimensions;
@@ -14,13 +14,13 @@ This is stricter than scripts/validate_persona_pool.py:
   persona reproduces default behaviour fails the min_side_delta gate.
 
 Usage:
-  OPENROUTER_API_KEY=... uv run python scripts/validate_persona_axes_openrouter.py \\
+  OPENROUTER_API_KEY=... uv run python scripts/validate_persona_axes.py \\
     --axes data/personas/persona_pairs_pilot_two.jsonl \\
     --templates data/templates/template_catalog.yaml \\
     --n 3 --family data/scenarios/scenarios_v2_candidates.jsonl --out out/persona_axes_direct.json
 
 Dry-run without network:
-  uv run python scripts/validate_persona_axes_openrouter.py --dry-run --n 1
+  uv run python scripts/validate_persona_axes.py --dry-run --n 1
 """
 from __future__ import annotations
 
@@ -28,11 +28,8 @@ import argparse
 import asyncio
 import hashlib
 import json
-import os
 import random
 import re
-import sys
-import time
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -40,16 +37,26 @@ from statistics import pstdev
 from typing import Any
 
 from dotenv import load_dotenv
+from inspect_ai import Task, eval_async
+from inspect_ai.dataset import MemoryDataset, Sample
+from inspect_ai.model import (
+    CachePolicy,
+    GenerateConfig,
+    Model,
+    ModelOutput,
+    ResponseSchema,
+    get_model,
+)
+from inspect_ai.scorer import Score, scorer
+from inspect_ai.solver import Generate, TaskState, solver
 from loguru import logger
-from openrouter_wrapper.retry import openrouter_request
 from tabulate import tabulate
-from tqdm.asyncio import tqdm as atqdm
 
 from bounded_thinking_judge import judge as bounded_judge
 from template_catalog import active_template_rows, load_template_catalog
 
 ROOT = Path(__file__).resolve().parents[1]
-JSON_RETRIES = 5
+RESULT_STORE_KEY = "persona_axis_result"
 
 
 @dataclass(frozen=True)
@@ -222,15 +229,6 @@ def _json_obj(text: str) -> dict:
 
 def _assert_json_text(text: str, json_schema: dict | None = None) -> None:
     _json_obj(text)
-
-
-def _message_reasoning(message: Any) -> str:
-    raw = message if isinstance(message, dict) else message.model_dump(mode="json")
-    for key in ("reasoning", "reasoning_content"):
-        value = raw.get(key)
-        if value:
-            return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
-    return ""
 
 
 def _refusal_phrase_hits(text: str) -> list[str]:
@@ -530,7 +528,10 @@ def _select_templates(arg: str) -> tuple[str, ...]:
             templates = tuple(line.strip() for line in path.read_text().splitlines() if line.strip())
     else:
         templates = tuple(x.strip() for x in arg.split("||") if x.strip())
-    missing = [t for t in templates if t and "{persona}" not in t]
+    missing = [
+        t for t in templates
+        if t and t != VERBATIM_TEMPLATE and "{persona}" not in t
+    ]
     if missing:
         raise ValueError(f"template(s) missing {{persona}} slot: {missing}")
     return templates
@@ -742,145 +743,87 @@ The overall off_axis_problem_likert should summarize the worst meaningful
 confound, not the average."""
 
 
-class OpenRouter:
-    def __init__(self, cache_dir: Path, concurrency: int):
-        self.cache_dir = cache_dir
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.sem = asyncio.Semaphore(concurrency)
+def _response_schema(schema: dict) -> ResponseSchema:
+    spec = schema["json_schema"]
+    return ResponseSchema(
+        name=spec["name"],
+        json_schema=spec["schema"],
+        strict=spec["strict"],
+    )
 
-    async def chat_jsonish(
-        self,
-        *,
-        model: str,
-        messages: list[dict],
-        temperature: float,
-        max_tokens: int,
-        cache_tag: str,
-        seed: int,
-        json_schema: dict | None,
-        provider_only: tuple[str, ...] = (),
-    ) -> str:
-        payload = {
-            "model": _model_name(model),
-            "messages": messages,
-            "temperature": temperature,
-            "top_p": 1.0,
-            "max_tokens": max_tokens,
-            "seed": seed,
-        }
-        extra_body = {
-            "reasoning": {"exclude": True, "effort": "none"},
-            "reasoning_effort": "none",
-            "include_reasoning": False,
-        }
-        if json_schema is not None:
-            payload["response_format"] = json_schema
-        if provider_only:
-            payload["provider"] = {"only": list(provider_only), "allow_fallbacks": False}
-        key = f"{cache_tag}_{_hkey({'payload': payload, 'extra_body': extra_body})}.json"
-        path = self.cache_dir / key
-        if path.exists():
-            content = json.loads(path.read_text())["content"]
-            if json_schema is None:
-                return content
-            try:
-                _assert_json_text(content, json_schema)
-                return content
-            except (json.JSONDecodeError, ValueError):
-                bad_path = path.with_suffix(f".bad-{int(time.time())}.json")
-                path.rename(bad_path)
-                logger.warning(f"quarantined malformed cached JSON judge output: {bad_path}")
-        attempts = JSON_RETRIES
-        last_content = ""
-        last_error: Exception | None = None
-        for attempt in range(1, attempts + 1):
-            async with self.sem:
-                resp = await openrouter_request({**payload, **extra_body}, timeout=90.0)
-            choices = resp["choices"]
-            if not choices:
-                last_error = RuntimeError(f"empty response choices: {resp!r}")
-                if attempt < attempts:
-                    await asyncio.sleep(min(30.0, 2.0 * attempt))
-                continue
-            message = choices[0]["message"]
-            content = message.get("content") or ""
-            last_content = content
-            if json_schema is not None:
-                try:
-                    _assert_json_text(content, json_schema)
-                except (json.JSONDecodeError, ValueError) as e:
-                    last_error = e
-                    logger.warning(
-                        f"malformed JSON judge output attempt {attempt}/{attempts} "
-                        f"cache_tag={cache_tag}: {content[:160]!r}"
-                    )
-                    if attempt < attempts:
-                        await asyncio.sleep(min(30.0, 2.0 * attempt))
-                    continue
-            path.write_text(json.dumps({
-                "created_at": time.time(),
-                "payload": payload,
-                "extra_body": extra_body,
-                "content": content,
-                "message": message,
-                "reasoning": _message_reasoning(message),
-            }, indent=2))
-            return content
-        raise ValueError(
-            f"malformed JSON after {attempts} attempts for {cache_tag}: "
-            f"{last_error}; content={last_content[:500]!r}"
-        )
 
-    async def chat_bounded_thinking_judge(
-        self,
-        *,
-        model: str,
-        prompt: str,
-        cache_tag: str,
-        seed: int,
-        n: int = 2,
-        budget: int = 4096,
-        provider_only: tuple[str, ...] = (),
-    ) -> str:
-        """Bounded-thinking axis judge. Returns a JSON STRING shaped like the JSON judge
-        path (so _json_obj + _validate_axis_obj + _pairwise_expected work unchanged):
-        {"target_reason": "", "A_more_target_than_B": <1-5 float>, "found": <bool>,
-         "found_rate": <float>, "forced_rate": <float>}.
+def _inspect_cache(provider_only: tuple[str, ...]) -> CachePolicy:
+    return CachePolicy(
+        expiry=None,
+        per_epoch=False,
+        scopes={"openrouter_provider_only": ",".join(provider_only)},
+    )
 
-        `found=False` means the judge never committed a SCORE even after the phase-2
-        force-answer; the caller must treat the item as excluded (strict_pass=False),
-        never as a tie. See scripts/bounded_thinking_judge.py.
-        """
-        payload_key = {"model": _model_name(model), "prompt": prompt, "n": n, "budget": budget,
-                       "seed": seed, "provider_only": list(provider_only)}
-        key = f"{cache_tag}_{_hkey({'payload': payload_key})}.json"
-        path = self.cache_dir / key
-        if path.exists():
-            return json.loads(path.read_text())["content"]
-        async with self.sem:
-            res = await bounded_judge(
-                model=model, prompt=prompt, n=n, budget=budget, seed=seed,
-                provider_only=provider_only,
-            )
-        from bounded_thinking_judge import score_to_a_more_target_than_b
-        a_more = score_to_a_more_target_than_b(res["score"]) if res["found_rate"] > 0.0 else 3.0
-        obj = {
-            "target_reason": "",
-            "A_more_target_than_B": a_more,
-            "found": res["found_rate"] > 0.0,
-            "found_rate": res["found_rate"],
-            "forced_rate": res["forced_rate"],
-            "n_samples": res["n"],
-            "budget": res["budget"],
-            "samples": res["samples"],
-        }
-        content = json.dumps(obj)
-        path.write_text(json.dumps({
-            "created_at": time.time(),
-            "payload": payload_key,
-            "content": content,
-        }, indent=2))
-        return content
+
+async def _chat_jsonish(
+    *,
+    model: Model,
+    prompt: str,
+    temperature: float,
+    max_tokens: int,
+    seed: int,
+    max_connections: int,
+    json_schema: dict | None,
+    cache: CachePolicy,
+) -> str:
+    config = GenerateConfig(
+        temperature=temperature,
+        top_p=1.0,
+        max_tokens=max_tokens,
+        seed=seed,
+        max_connections=max_connections,
+        timeout=90,
+        reasoning_effort="none",
+        response_schema=_response_schema(json_schema) if json_schema else None,
+        extra_body={"include_reasoning": False},
+    )
+    output = await model.generate(prompt, config=config, cache=cache)
+    content = output.completion
+    if json_schema is not None:
+        _assert_json_text(content, json_schema)
+    return content
+
+
+async def _chat_bounded_thinking_judge(
+    *,
+    model: Model,
+    force_model: Model,
+    prompt: str,
+    seed: int,
+    n: int,
+    budget: int,
+    max_connections: int,
+    cache: CachePolicy,
+) -> str:
+    """Run the custom two-phase judge through Inspect and retain non-verdict evidence."""
+    res = await bounded_judge(
+        model=model,
+        force_model=force_model,
+        prompt=prompt,
+        n=n,
+        budget=budget,
+        seed=seed,
+        max_connections=max_connections,
+        cache=cache,
+    )
+    from bounded_thinking_judge import score_to_a_more_target_than_b
+
+    a_more = score_to_a_more_target_than_b(res["score"]) if res["found_rate"] > 0.0 else 3.0
+    return json.dumps({
+        "target_reason": "",
+        "A_more_target_than_B": a_more,
+        "found": res["found_rate"] > 0.0,
+        "found_rate": res["found_rate"],
+        "forced_rate": res["forced_rate"],
+        "n_samples": res["n"],
+        "budget": res["budget"],
+        "samples": res["samples"],
+    })
 
 
 def _labels_for(seed: int, *parts: str) -> tuple[str, str, str]:
@@ -931,17 +874,25 @@ def _validate_confound_obj(obj: dict) -> None:
 
 
 async def _evaluate_one(
-    router: OpenRouter,
     args,
     *,
     axis: Axis,
     template: str,
     row: dict,
     row_i: int,
+    baseline_tasks: dict[str, asyncio.Task[str]],
 ) -> dict:
-    generator_model = args.generator_model
-    style_judge_model = args.judge_model
-    axis_judge_models = args.axis_judge_models
+    generator_model_name = args.generator_model
+    style_judge_model_name = args.judge_model
+    axis_judge_model_names = args.axis_judge_models
+    generator_model = get_model(role="generator")
+    style_judge_model = get_model(role="style_judge")
+    axis_judge_models = tuple(
+        get_model(role=f"axis_judge_{i}") for i in range(len(axis_judge_model_names))
+    )
+    axis_judge_force_models = tuple(
+        get_model(role=f"axis_judge_force_{i}") for i in range(len(axis_judge_model_names))
+    ) if args.axis_judge_method == "bounded_thinking" else ()
     seed = args.seed
     gen_temperature = args.gen_temperature
     max_word_delta_frac = args.max_word_delta_frac
@@ -951,7 +902,7 @@ async def _evaluate_one(
     pos_persona = _persona_text(axis, template, axis.pos_descriptor, "pos")
     neg_persona = _persona_text(axis, template, axis.neg_descriptor, "neg")
     self_contained = bool(row.get("self_contained"))
-    qwen_no_think = _uses_qwen_no_think(generator_model)
+    qwen_no_think = _uses_qwen_no_think(generator_model_name)
     pos_generation_prompt = _generation_prompt(pos_persona, scenario, self_contained, qwen_no_think)
     neg_generation_prompt = _generation_prompt(neg_persona, scenario, self_contained, qwen_no_think)
     # No-persona baseline; template-independent, so the cache collapses it to one gen per scenario.
@@ -964,8 +915,8 @@ async def _evaluate_one(
             scenario=scenario,
             axis_id=axis.id,
             template=template,
-            generator_model=generator_model,
-            judge_model=",".join(axis_judge_models) + "|" + style_judge_model,
+            generator_model=generator_model_name,
+            judge_model=",".join(axis_judge_model_names) + "|" + style_judge_model_name,
             gen_temperature=gen_temperature,
         ),
         "row": row_i,
@@ -982,286 +933,291 @@ async def _evaluate_one(
         "neg_generation_prompt": neg_generation_prompt,
         "base_generation_prompt": base_generation_prompt,
     }
-    try:
-        def _gen(prompt: str, tag: str):
-            return router.chat_jsonish(
-                model=generator_model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=gen_temperature,
-                max_tokens=260,
-                cache_tag=tag,
-                seed=seed,
-                json_schema=None,
-                provider_only=generator_provider_only,
-            )
+    async def _gen(prompt: str, *, baseline: bool = False) -> str:
+        if baseline and prompt in baseline_tasks:
+            return await baseline_tasks[prompt]
+        task = asyncio.create_task(_chat_jsonish(
+            model=generator_model,
+            prompt=prompt,
+            temperature=gen_temperature,
+            max_tokens=260,
+            seed=seed,
+            max_connections=args.concurrency,
+            json_schema=None,
+            cache=_inspect_cache(generator_provider_only),
+        ))
+        if baseline:
+            baseline_tasks[prompt] = task
+        return await task
 
-        if pos_persona == neg_persona:
-            pos_text, base_text = await asyncio.gather(
-                _gen(pos_generation_prompt, "gen_pos"),
-                _gen(base_generation_prompt, "gen_base"),
-            )
-            neg_text = pos_text
-        else:
-            pos_text, neg_text, base_text = await asyncio.gather(
-                _gen(pos_generation_prompt, "gen_pos"),
-                _gen(neg_generation_prompt, "gen_neg"),
-                _gen(base_generation_prompt, "gen_base"),
-            )
-        pos_text, neg_text, base_text = pos_text.strip(), neg_text.strip(), base_text.strip()
-        if not pos_text or not neg_text or not base_text:
-            raise ValueError(
-                f"empty generation: pos_words={len(_words(pos_text))}, "
-                f"neg_words={len(_words(neg_text))}, base_words={len(_words(base_text))}")
-        pos_label, neg_label, order = _labels_for(seed, axis.id, template, str(row_i), scenario)
-        a_text, b_text = _response_by_label(pos_label, pos_text, neg_text)
+    if pos_persona == neg_persona:
+        pos_text, base_text = await asyncio.gather(
+            _gen(pos_generation_prompt),
+            _gen(base_generation_prompt, baseline=True),
+        )
+        neg_text = pos_text
+    else:
+        pos_text, neg_text, base_text = await asyncio.gather(
+            _gen(pos_generation_prompt),
+            _gen(neg_generation_prompt),
+            _gen(base_generation_prompt, baseline=True),
+        )
+    pos_text, neg_text, base_text = pos_text.strip(), neg_text.strip(), base_text.strip()
+    if not pos_text or not neg_text or not base_text:
+        raise ValueError(
+            f"empty generation: pos_words={len(_words(pos_text))}, "
+            f"neg_words={len(_words(neg_text))}, base_words={len(_words(base_text))}")
+    pos_label, neg_label, order = _labels_for(seed, axis.id, template, str(row_i), scenario)
+    a_text, b_text = _response_by_label(pos_label, pos_text, neg_text)
 
-        # Baseline-anchored axis judging: each pole vs the no-persona baseline, both
-        # orders. A one-sided template (one persona == default behaviour) shows up as a
-        # near-zero side delta instead of hiding inside a big pos-vs-neg gap.
-        axis_pair_specs = (
-            ("pos_base", pos_text, base_text, "positive"),
-            ("neg_base", neg_text, base_text, "negative"),
-        )
-        axis_tasks = []
-        bounded = axis_judge_method == "bounded_thinking"
-        for axis_judge_model in axis_judge_models:
-            model_slug = _model_name(axis_judge_model).replace("/", "_")
-            for pair_name, target_text, other_text, pole in axis_pair_specs:
-                for order_name, first, second in (
-                    ("fwd", target_text, other_text),
-                    ("rev", other_text, target_text),
-                ):
-                    if bounded:
-                        axis_tasks.append(router.chat_bounded_thinking_judge(
-                            model=axis_judge_model,
-                            prompt=_axis_pairwise_bounded_judge_prompt(
-                                axis, scenario, first, second, pole=pole),
-                            cache_tag=f"judge_axis_{pair_name}_{order_name}_bounded_v1_{model_slug}",
-                            seed=seed, n=args.axis_judge_n, budget=args.axis_judge_budget,
-                            provider_only=generator_provider_only,
-                        ))
-                    else:
-                        axis_tasks.append(router.chat_jsonish(
-                            model=axis_judge_model,
-                            messages=[{"role": "user", "content": _axis_pairwise_judge_prompt(
-                                axis, scenario, first, second, pole=pole)}],
-                            temperature=0.0,
-                            max_tokens=1200,
-                            cache_tag=f"judge_axis_{pair_name}_{order_name}_v1_{model_slug}",
-                            seed=seed,
-                            json_schema=_axis_judge_schema(),
-                        ))
-        style_raw, confound_raw, *axis_raw = await asyncio.gather(
-            router.chat_jsonish(
-                model=style_judge_model,
-                messages=[{"role": "user", "content": _style_judge_prompt(scenario, a_text, b_text)}],
-                temperature=0.0,
-                max_tokens=4096,
-                cache_tag="judge_style_v5",
-                seed=seed,
-                json_schema=_style_judge_schema(),
-            ),
-            router.chat_jsonish(
-                model=style_judge_model,
-                messages=[{"role": "user", "content": _confound_judge_prompt(axis, scenario, a_text, b_text)}],
-                temperature=0.0,
-                max_tokens=4096,
-                cache_tag="judge_confound_v6",
-                seed=seed,
-                json_schema=_confound_judge_schema(),
-            ),
-            *axis_tasks,
-        )
-        raw_judge_outputs = {
-            "style": style_raw,
-            "confound": confound_raw,
-            "axis": [
-                {
-                    "judge_model": axis_judge_model,
-                    "pos_base_forward": axis_raw[4 * i],
-                    "pos_base_reverse": axis_raw[4 * i + 1],
-                    "neg_base_forward": axis_raw[4 * i + 2],
-                    "neg_base_reverse": axis_raw[4 * i + 3],
-                }
-                for i, axis_judge_model in enumerate(axis_judge_models)
-            ],
-        }
-        base["raw_judge_outputs"] = raw_judge_outputs
-        style_j = _json_obj(style_raw)
-        confound_j = _json_obj(confound_raw)
-        _validate_style_obj(style_j)
-        _validate_confound_obj(confound_j)
-        axis_judges = []
-        judge_did_not_commit = False
-        for i, axis_judge_model in enumerate(axis_judge_models):
-            pos_base_fwd_j = _json_obj(axis_raw[4 * i])
-            pos_base_rev_j = _json_obj(axis_raw[4 * i + 1])
-            neg_base_fwd_j = _json_obj(axis_raw[4 * i + 2])
-            neg_base_rev_j = _json_obj(axis_raw[4 * i + 3])
-            judgments = (pos_base_fwd_j, pos_base_rev_j, neg_base_fwd_j, neg_base_rev_j)
-            for axis_j in judgments:
-                _validate_axis_obj(axis_j)
-            # Bounded judge: a non-verdict (found=False) must NOT be laundered into a tie.
-            if bounded:
-                judge_did_not_commit = judge_did_not_commit or any(
-                    not bool(j.get("found", True)) for j in judgments
-                )
-            # Each side delta in [-2,+2]. delta_pos_vs_base > 0: pos persona above baseline
-            # on the positive behavior; delta_base_vs_neg > 0: neg persona below baseline
-            # (i.e. more negative-pole than baseline). Both > 0 means neg < baseline < pos.
-            delta_pos_vs_base = (
-                _pairwise_expected(pos_base_fwd_j, True)
-                + _pairwise_expected(pos_base_rev_j, False)
-            ) / 2.0
-            delta_base_vs_neg = (
-                _pairwise_expected(neg_base_fwd_j, True)
-                + _pairwise_expected(neg_base_rev_j, False)
-            ) / 2.0
-            axis_judges.append({
+    # Baseline-anchored axis judging: each pole vs the no-persona baseline, both
+    # orders. A one-sided template (one persona == default behaviour) shows up as a
+    # near-zero side delta instead of hiding inside a big pos-vs-neg gap.
+    axis_pair_specs = (
+        ("pos_base", pos_text, base_text, "positive"),
+        ("neg_base", neg_text, base_text, "negative"),
+    )
+    axis_tasks = []
+    bounded = axis_judge_method == "bounded_thinking"
+    for judge_i, axis_judge_model in enumerate(axis_judge_models):
+        for pair_name, target_text, other_text, pole in axis_pair_specs:
+            for order_name, first, second in (
+                ("fwd", target_text, other_text),
+                ("rev", other_text, target_text),
+            ):
+                if bounded:
+                    axis_tasks.append(_chat_bounded_thinking_judge(
+                        model=axis_judge_model,
+                        force_model=axis_judge_force_models[judge_i],
+                        prompt=_axis_pairwise_bounded_judge_prompt(
+                            axis, scenario, first, second, pole=pole),
+                        seed=seed, n=args.axis_judge_n, budget=args.axis_judge_budget,
+                        max_connections=args.concurrency,
+                        cache=_inspect_cache(generator_provider_only),
+                    ))
+                else:
+                    axis_tasks.append(_chat_jsonish(
+                        model=axis_judge_model,
+                        prompt=_axis_pairwise_judge_prompt(
+                            axis, scenario, first, second, pole=pole),
+                        temperature=0.0,
+                        max_tokens=1200,
+                        seed=seed,
+                        max_connections=args.concurrency,
+                        json_schema=_axis_judge_schema(),
+                        cache=_inspect_cache(()),
+                    ))
+    style_raw, confound_raw, *axis_raw = await asyncio.gather(
+        _chat_jsonish(
+            model=style_judge_model,
+            prompt=_style_judge_prompt(scenario, a_text, b_text),
+            temperature=0.0,
+            max_tokens=4096,
+            seed=seed,
+            max_connections=args.concurrency,
+            json_schema=_style_judge_schema(),
+            cache=_inspect_cache(()),
+        ),
+        _chat_jsonish(
+            model=style_judge_model,
+            prompt=_confound_judge_prompt(axis, scenario, a_text, b_text),
+            temperature=0.0,
+            max_tokens=4096,
+            seed=seed,
+            max_connections=args.concurrency,
+            json_schema=_confound_judge_schema(),
+            cache=_inspect_cache(()),
+        ),
+        *axis_tasks,
+    )
+    raw_judge_outputs = {
+        "style": style_raw,
+        "confound": confound_raw,
+        "axis": [
+            {
                 "judge_model": axis_judge_model,
-                "pos_base_forward_judgment": pos_base_fwd_j,
-                "pos_base_reverse_judgment": pos_base_rev_j,
-                "neg_base_forward_judgment": neg_base_fwd_j,
-                "neg_base_reverse_judgment": neg_base_rev_j,
-                "delta_pos_vs_base": delta_pos_vs_base,
-                "delta_base_vs_neg": delta_base_vs_neg,
-                "axis_delta": 2.0 * (delta_pos_vs_base + delta_base_vs_neg),
-            })
-
-        delta_pos_vs_base = _mean([j["delta_pos_vs_base"] for j in axis_judges])
-        delta_base_vs_neg = _mean([j["delta_base_vs_neg"] for j in axis_judges])
-        min_side_delta = min(delta_pos_vs_base, delta_base_vs_neg)
-        axis_delta_values = [j["axis_delta"] for j in axis_judges]
-        axis_delta = sum(axis_delta_values) / len(axis_delta_values)
-        axis_delta_judge_std = _std(axis_delta_values)
-        axis_judge_mean_abs_disagreement = 0.0
-        if len(axis_judges) > 1:
-            axis_judge_mean_abs_disagreement = sum(
-                abs(a - b) for a in axis_delta_values for b in axis_delta_values
-            ) / (len(axis_delta_values) * len(axis_delta_values))
-        word_pos = len(_words(pos_text))
-        word_neg = len(_words(neg_text))
-        word_delta_frac = (word_pos - word_neg) / max(1, (word_pos + word_neg) / 2)
-        response_token_jaccard = _token_jaccard(pos_text, neg_text)
-        pos_repeated_token_frac = _repeated_token_frac(pos_text)
-        neg_repeated_token_frac = _repeated_token_frac(neg_text)
-        style_deltas = {dim: _style_delta(style_j, dim, pos_label) for dim in STYLE_DIMS}
-        max_style_abs_delta = max(abs(v) for v in style_deltas.values())
-        off_axis_likerts = {
-            dim: _bounded_score(confound_j, f"{dim}_likert", 1.0, 7.0)
-            for dim in OFF_AXIS_DIMS
-        }
-        # When --exclude-confound-dims is set, recompute the off-axis max excluding
-        # on-axis dims (e.g. honesty_truthfulness for the honesty axis) to avoid
-        # circular penalization of the very behavior we're steering.
-        if args.exclude_confound_dims:
-            off_axis_for_gate = {k: v for k, v in off_axis_likerts.items() if k not in args.exclude_confound_dims}
-            off_axis_problem_likert = max(off_axis_for_gate.values()) if off_axis_for_gate else 1.0
-        else:
-            off_axis_problem_likert = float(confound_j["off_axis_problem_likert"])
-        max_off_axis_category_likert = max(off_axis_likerts.values())
-        pos_refusal_phrase_hits = _refusal_phrase_hits(pos_text)
-        neg_refusal_phrase_hits = _refusal_phrase_hits(neg_text)
-        pos_persona_echo_hits = _persona_echo_hits(
-            pos_text, axis.pos_descriptor, pos_persona)
-        neg_persona_echo_hits = _persona_echo_hits(
-            neg_text, axis.neg_descriptor, neg_persona)
-        pos_persona_overlap_tokens = _persona_overlap_tokens(pos_text, pos_persona)
-        neg_persona_overlap_tokens = _persona_overlap_tokens(neg_text, neg_persona)
-        judge_persona_echo = bool(
-            style_j[f"persona_echo_{pos_label}"] or style_j[f"persona_echo_{neg_label}"])
-        pos_echo = bool(style_j[f"persona_echo_{pos_label}"]) or bool(pos_persona_echo_hits)
-        neg_echo = bool(style_j[f"persona_echo_{neg_label}"]) or bool(neg_persona_echo_hits)
-        judge_refusal_or_ai_break = bool(
-            style_j[f"refusal_or_ai_break_{pos_label}"]
-            or style_j[f"refusal_or_ai_break_{neg_label}"])
-        pos_refusal = (
-            bool(style_j[f"refusal_or_ai_break_{pos_label}"])
-            or bool(pos_refusal_phrase_hits)
-        )
-        neg_refusal = (
-            bool(style_j[f"refusal_or_ai_break_{neg_label}"])
-            or bool(neg_refusal_phrase_hits)
-        )
-        length_ok = True if max_word_delta_frac <= 0 else abs(word_delta_frac) <= max_word_delta_frac
-        strict_pass = (
-            axis_delta >= args.axis_delta_threshold
-            and min_side_delta >= args.min_side_threshold
-            and off_axis_problem_likert <= args.off_axis_threshold
-            and bool(confound_j["usable_for_training"])
-            and max_style_abs_delta <= 2
-            and length_ok
-            and not (pos_echo or neg_echo or pos_refusal or neg_refusal)
-            and not judge_did_not_commit
-        )
-        # Overall score: weakest-side movement vs baseline (x4 puts it on the same [-8,8]
-        # scale as axis_delta) minus off-axis contamination minus style shift. min not sum:
-        # summing lets one big side hide a dead side, the exact failure mode we gate on.
-        # Boolean failures (echo, refusal, no-commit) get -3 each so they sort below clean rows.
-        overall_score = (
-            4.0 * min_side_delta
-            - off_axis_problem_likert
-            - max_style_abs_delta
-            - 3.0 * (pos_echo or neg_echo)
-            - 3.0 * (pos_refusal or neg_refusal)
-            - 3.0 * judge_did_not_commit
-        )
-        base.update({
-            "pos_response": pos_text,
-            "neg_response": neg_text,
-            "base_response": base_text,
-            # control condition: pos==neg persona, so style/confound deltas are trivially clean
-            "control_pair": pos_persona == neg_persona,
-            "blind_order": order,
-            "pos_label": pos_label,
-            "neg_label": neg_label,
-            "response_A": a_text,
-            "response_B": b_text,
-            "axis_judge_models": list(axis_judge_models),
-            "axis_judgments": axis_judges,
-            "style_judgment": style_j,
-            "confound_judgment": confound_j,
-            "axis_judge_mean_abs_disagreement": round(axis_judge_mean_abs_disagreement, 4),
-            "axis_delta_judge_mean": round(axis_delta, 4),
-            "axis_delta_judge_std": round(axis_delta_judge_std, 4),
-            "delta_pos_vs_base": round(delta_pos_vs_base, 4),
-            "delta_base_vs_neg": round(delta_base_vs_neg, 4),
-            "min_side_delta": round(min_side_delta, 4),
-            "axis_delta": round(axis_delta, 4),
-            "on_axis_frac": round(max(0.0, min(1.0, axis_delta / 8.0)), 4),
-            "word_pos": word_pos,
-            "word_neg": word_neg,
-            "word_delta_frac": round(word_delta_frac, 4),
-            "response_token_jaccard": round(response_token_jaccard, 4),
-            "pos_repeated_token_frac": round(pos_repeated_token_frac, 4),
-            "neg_repeated_token_frac": round(neg_repeated_token_frac, 4),
-            "pos_persona_overlap_tokens": pos_persona_overlap_tokens,
-            "neg_persona_overlap_tokens": neg_persona_overlap_tokens,
-            "length_gate_enabled": max_word_delta_frac > 0,
-            "length_ok": length_ok,
-            "style_deltas_pos_minus_neg": style_deltas,
-            "max_style_abs_delta": max_style_abs_delta,
-            "off_axis_category_likerts": off_axis_likerts,
-            "max_off_axis_category_likert": max_off_axis_category_likert,
-            # the value strict_pass/overall_score actually gate on (respects --exclude-confound-dims)
-            "off_axis_problem_likert_gate": off_axis_problem_likert,
-            "off_axis_problem_frac": round(
-                _normalize_likert(float(confound_j["off_axis_problem_likert"]), 1.0, 7.0), 4),
-            "pos_refusal_phrase_hits": pos_refusal_phrase_hits,
-            "neg_refusal_phrase_hits": neg_refusal_phrase_hits,
-            "pos_persona_echo_hits": pos_persona_echo_hits,
-            "neg_persona_echo_hits": neg_persona_echo_hits,
-            "judge_persona_echo": judge_persona_echo,
-            "persona_echo": pos_echo or neg_echo,
-            "judge_refusal_or_ai_break": judge_refusal_or_ai_break,
-            "refusal_or_ai_break": pos_refusal or neg_refusal,
-            "judge_did_not_commit": judge_did_not_commit,
-            "axis_judge_method": axis_judge_method,
-            "strict_pass": strict_pass,
-            "overall_score": round(overall_score, 3),
+                "pos_base_forward": axis_raw[4 * i],
+                "pos_base_reverse": axis_raw[4 * i + 1],
+                "neg_base_forward": axis_raw[4 * i + 2],
+                "neg_base_reverse": axis_raw[4 * i + 3],
+            }
+            for i, axis_judge_model in enumerate(axis_judge_model_names)
+        ],
+    }
+    base["raw_judge_outputs"] = raw_judge_outputs
+    style_j = _json_obj(style_raw)
+    confound_j = _json_obj(confound_raw)
+    _validate_style_obj(style_j)
+    _validate_confound_obj(confound_j)
+    axis_judges = []
+    judge_did_not_commit = False
+    for i, axis_judge_model in enumerate(axis_judge_model_names):
+        pos_base_fwd_j = _json_obj(axis_raw[4 * i])
+        pos_base_rev_j = _json_obj(axis_raw[4 * i + 1])
+        neg_base_fwd_j = _json_obj(axis_raw[4 * i + 2])
+        neg_base_rev_j = _json_obj(axis_raw[4 * i + 3])
+        judgments = (pos_base_fwd_j, pos_base_rev_j, neg_base_fwd_j, neg_base_rev_j)
+        for axis_j in judgments:
+            _validate_axis_obj(axis_j)
+        # Bounded judge: a non-verdict (found=False) must NOT be laundered into a tie.
+        if bounded:
+            judge_did_not_commit = judge_did_not_commit or any(
+                not bool(j.get("found", True)) for j in judgments
+            )
+        # Each side delta in [-2,+2]. delta_pos_vs_base > 0: pos persona above baseline
+        # on the positive behavior; delta_base_vs_neg > 0: neg persona below baseline
+        # (i.e. more negative-pole than baseline). Both > 0 means neg < baseline < pos.
+        delta_pos_vs_base = (
+            _pairwise_expected(pos_base_fwd_j, True)
+            + _pairwise_expected(pos_base_rev_j, False)
+        ) / 2.0
+        delta_base_vs_neg = (
+            _pairwise_expected(neg_base_fwd_j, True)
+            + _pairwise_expected(neg_base_rev_j, False)
+        ) / 2.0
+        axis_judges.append({
+            "judge_model": axis_judge_model,
+            "pos_base_forward_judgment": pos_base_fwd_j,
+            "pos_base_reverse_judgment": pos_base_rev_j,
+            "neg_base_forward_judgment": neg_base_fwd_j,
+            "neg_base_reverse_judgment": neg_base_rev_j,
+            "delta_pos_vs_base": delta_pos_vs_base,
+            "delta_base_vs_neg": delta_base_vs_neg,
+            "axis_delta": 2.0 * (delta_pos_vs_base + delta_base_vs_neg),
         })
-    except Exception as e:
-        base["error"] = f"{type(e).__name__}: {e}"
+
+    delta_pos_vs_base = _mean([j["delta_pos_vs_base"] for j in axis_judges])
+    delta_base_vs_neg = _mean([j["delta_base_vs_neg"] for j in axis_judges])
+    min_side_delta = min(delta_pos_vs_base, delta_base_vs_neg)
+    axis_delta_values = [j["axis_delta"] for j in axis_judges]
+    axis_delta = sum(axis_delta_values) / len(axis_delta_values)
+    axis_delta_judge_std = _std(axis_delta_values)
+    axis_judge_mean_abs_disagreement = 0.0
+    if len(axis_judges) > 1:
+        axis_judge_mean_abs_disagreement = sum(
+            abs(a - b) for a in axis_delta_values for b in axis_delta_values
+        ) / (len(axis_delta_values) * len(axis_delta_values))
+    word_pos = len(_words(pos_text))
+    word_neg = len(_words(neg_text))
+    word_delta_frac = (word_pos - word_neg) / max(1, (word_pos + word_neg) / 2)
+    response_token_jaccard = _token_jaccard(pos_text, neg_text)
+    pos_repeated_token_frac = _repeated_token_frac(pos_text)
+    neg_repeated_token_frac = _repeated_token_frac(neg_text)
+    style_deltas = {dim: _style_delta(style_j, dim, pos_label) for dim in STYLE_DIMS}
+    max_style_abs_delta = max(abs(v) for v in style_deltas.values())
+    off_axis_likerts = {
+        dim: _bounded_score(confound_j, f"{dim}_likert", 1.0, 7.0)
+        for dim in OFF_AXIS_DIMS
+    }
+    # When --exclude-confound-dims is set, recompute the off-axis max excluding
+    # on-axis dims (e.g. honesty_truthfulness for the honesty axis) to avoid
+    # circular penalization of the very behavior we're steering.
+    if args.exclude_confound_dims:
+        off_axis_for_gate = {k: v for k, v in off_axis_likerts.items() if k not in args.exclude_confound_dims}
+        off_axis_problem_likert = max(off_axis_for_gate.values()) if off_axis_for_gate else 1.0
+    else:
+        off_axis_problem_likert = float(confound_j["off_axis_problem_likert"])
+    max_off_axis_category_likert = max(off_axis_likerts.values())
+    pos_refusal_phrase_hits = _refusal_phrase_hits(pos_text)
+    neg_refusal_phrase_hits = _refusal_phrase_hits(neg_text)
+    pos_persona_echo_hits = _persona_echo_hits(
+        pos_text, axis.pos_descriptor, pos_persona)
+    neg_persona_echo_hits = _persona_echo_hits(
+        neg_text, axis.neg_descriptor, neg_persona)
+    pos_persona_overlap_tokens = _persona_overlap_tokens(pos_text, pos_persona)
+    neg_persona_overlap_tokens = _persona_overlap_tokens(neg_text, neg_persona)
+    judge_persona_echo = bool(
+        style_j[f"persona_echo_{pos_label}"] or style_j[f"persona_echo_{neg_label}"])
+    pos_echo = bool(style_j[f"persona_echo_{pos_label}"]) or bool(pos_persona_echo_hits)
+    neg_echo = bool(style_j[f"persona_echo_{neg_label}"]) or bool(neg_persona_echo_hits)
+    judge_refusal_or_ai_break = bool(
+        style_j[f"refusal_or_ai_break_{pos_label}"]
+        or style_j[f"refusal_or_ai_break_{neg_label}"])
+    pos_refusal = (
+        bool(style_j[f"refusal_or_ai_break_{pos_label}"])
+        or bool(pos_refusal_phrase_hits)
+    )
+    neg_refusal = (
+        bool(style_j[f"refusal_or_ai_break_{neg_label}"])
+        or bool(neg_refusal_phrase_hits)
+    )
+    length_ok = True if max_word_delta_frac <= 0 else abs(word_delta_frac) <= max_word_delta_frac
+    strict_pass = (
+        axis_delta >= args.axis_delta_threshold
+        and min_side_delta >= args.min_side_threshold
+        and off_axis_problem_likert <= args.off_axis_threshold
+        and bool(confound_j["usable_for_training"])
+        and max_style_abs_delta <= 2
+        and length_ok
+        and not (pos_echo or neg_echo or pos_refusal or neg_refusal)
+        and not judge_did_not_commit
+    )
+    # Overall score: weakest-side movement vs baseline (x4 puts it on the same [-8,8]
+    # scale as axis_delta) minus off-axis contamination minus style shift. min not sum:
+    # summing lets one big side hide a dead side, the exact failure mode we gate on.
+    # Boolean failures (echo, refusal, no-commit) get -3 each so they sort below clean rows.
+    overall_score = (
+        4.0 * min_side_delta
+        - off_axis_problem_likert
+        - max_style_abs_delta
+        - 3.0 * (pos_echo or neg_echo)
+        - 3.0 * (pos_refusal or neg_refusal)
+        - 3.0 * judge_did_not_commit
+    )
+    base.update({
+        "pos_response": pos_text,
+        "neg_response": neg_text,
+        "base_response": base_text,
+        # control condition: pos==neg persona, so style/confound deltas are trivially clean
+        "control_pair": pos_persona == neg_persona,
+        "blind_order": order,
+        "pos_label": pos_label,
+        "neg_label": neg_label,
+        "response_A": a_text,
+        "response_B": b_text,
+        "axis_judge_models": list(axis_judge_model_names),
+        "axis_judgments": axis_judges,
+        "style_judgment": style_j,
+        "confound_judgment": confound_j,
+        "axis_judge_mean_abs_disagreement": round(axis_judge_mean_abs_disagreement, 4),
+        "axis_delta_judge_mean": round(axis_delta, 4),
+        "axis_delta_judge_std": round(axis_delta_judge_std, 4),
+        "delta_pos_vs_base": round(delta_pos_vs_base, 4),
+        "delta_base_vs_neg": round(delta_base_vs_neg, 4),
+        "min_side_delta": round(min_side_delta, 4),
+        "axis_delta": round(axis_delta, 4),
+        "on_axis_frac": round(max(0.0, min(1.0, axis_delta / 8.0)), 4),
+        "word_pos": word_pos,
+        "word_neg": word_neg,
+        "word_delta_frac": round(word_delta_frac, 4),
+        "response_token_jaccard": round(response_token_jaccard, 4),
+        "pos_repeated_token_frac": round(pos_repeated_token_frac, 4),
+        "neg_repeated_token_frac": round(neg_repeated_token_frac, 4),
+        "pos_persona_overlap_tokens": pos_persona_overlap_tokens,
+        "neg_persona_overlap_tokens": neg_persona_overlap_tokens,
+        "length_gate_enabled": max_word_delta_frac > 0,
+        "length_ok": length_ok,
+        "style_deltas_pos_minus_neg": style_deltas,
+        "max_style_abs_delta": max_style_abs_delta,
+        "off_axis_category_likerts": off_axis_likerts,
+        "max_off_axis_category_likert": max_off_axis_category_likert,
+        # the value strict_pass/overall_score actually gate on (respects --exclude-confound-dims)
+        "off_axis_problem_likert_gate": off_axis_problem_likert,
+        "off_axis_problem_frac": round(
+            _normalize_likert(float(confound_j["off_axis_problem_likert"]), 1.0, 7.0), 4),
+        "pos_refusal_phrase_hits": pos_refusal_phrase_hits,
+        "neg_refusal_phrase_hits": neg_refusal_phrase_hits,
+        "pos_persona_echo_hits": pos_persona_echo_hits,
+        "neg_persona_echo_hits": neg_persona_echo_hits,
+        "judge_persona_echo": judge_persona_echo,
+        "persona_echo": pos_echo or neg_echo,
+        "judge_refusal_or_ai_break": judge_refusal_or_ai_break,
+        "refusal_or_ai_break": pos_refusal or neg_refusal,
+        "judge_did_not_commit": judge_did_not_commit,
+        "axis_judge_method": axis_judge_method,
+        "strict_pass": strict_pass,
+        "overall_score": round(overall_score, 3),
+    })
     return base
 
 
@@ -1398,22 +1354,223 @@ def print_judge_audit_samples(results: list[dict]) -> None:
         )
 
 
+def _solver_config(args) -> dict[str, Any]:
+    return {
+        **vars(args),
+        "axis_judge_models": list(args.axis_judge_models),
+        "generator_provider_only": list(args.generator_provider_only),
+        "exclude_confound_dims": sorted(args.exclude_confound_dims),
+    }
+
+
+@solver
+def persona_axis_solver(config: dict[str, Any]):
+    args = argparse.Namespace(**config)
+    args.axis_judge_models = tuple(args.axis_judge_models)
+    args.generator_provider_only = tuple(args.generator_provider_only)
+    args.exclude_confound_dims = set(args.exclude_confound_dims)
+    baseline_tasks: dict[str, asyncio.Task[str]] = {}
+
+    async def solve(state: TaskState, generate: Generate) -> TaskState:
+        metadata = state.metadata
+        result = await _evaluate_one(
+            args,
+            axis=Axis(**metadata["axis"]),
+            template=metadata["template"],
+            row=metadata["row"],
+            row_i=metadata["row_i"],
+            baseline_tasks=baseline_tasks,
+        )
+        state.store.set(RESULT_STORE_KEY, result)
+        state.output = ModelOutput.from_content(
+            model="persona-axis-evaluator",
+            content=json.dumps({
+                "eval_id": result["eval_id"],
+                "strict_pass": result["strict_pass"],
+                "overall_score": result["overall_score"],
+            }),
+        )
+        return state
+
+    return solve
+
+
+@scorer(metrics=[])
+def persona_axis_score():
+    async def score(state: TaskState, target) -> Score:
+        result = state.store.get(RESULT_STORE_KEY)
+        return Score(
+            value=float(result["overall_score"]),
+            answer="PASS" if result["strict_pass"] else "FAIL",
+            metadata={
+                "eval_id": result["eval_id"],
+                "strict_pass": result["strict_pass"],
+                "overall_score": result["overall_score"],
+                "self_contained": result["self_contained"],
+                "axis_delta": result["axis_delta"],
+                "min_side_delta": result["min_side_delta"],
+            },
+        )
+
+    return score
+
+
+def _openrouter_model(
+    name: str,
+    *,
+    max_connections: int,
+    provider_only: tuple[str, ...] = (),
+    reasoning_enabled: bool | None = False,
+) -> Model:
+    model_args: dict[str, Any] = {}
+    if provider_only:
+        model_args["provider"] = {
+            "only": list(provider_only),
+            "allow_fallbacks": False,
+        }
+    if reasoning_enabled is not None:
+        model_args["reasoning_enabled"] = reasoning_enabled
+    return get_model(
+        f"openrouter/{_model_name(name)}",
+        config=GenerateConfig(max_connections=max_connections),
+        memoize=False,
+        **model_args,
+    )
+
+
+def _inspect_task(args, axes: list[Axis], templates: tuple[str, ...], rows: list[dict]) -> Task:
+    samples = []
+    for row_i, row in enumerate(rows, start=1):
+        scenario = _scenario_text(row)
+        for axis in axes:
+            for template in templates:
+                samples.append(Sample(
+                    id=_eval_id(
+                        seed=args.seed,
+                        row=row,
+                        row_i=row_i,
+                        scenario=scenario,
+                        axis_id=axis.id,
+                        template=template,
+                        generator_model=args.generator_model,
+                        judge_model=",".join(args.axis_judge_models) + "|" + args.judge_model,
+                        gen_temperature=args.gen_temperature,
+                    ),
+                    input=scenario,
+                    metadata={
+                        "axis": asdict(axis),
+                        "template": template,
+                        "row": row,
+                        "row_i": row_i,
+                    },
+                ))
+
+    generator = _openrouter_model(
+        args.generator_model,
+        max_connections=args.concurrency,
+        provider_only=args.generator_provider_only,
+    )
+    roles: dict[str, Model] = {
+        "generator": generator,
+        "style_judge": _openrouter_model(
+            args.judge_model,
+            max_connections=args.concurrency,
+        ),
+    }
+    for i, name in enumerate(args.axis_judge_models):
+        roles[f"axis_judge_{i}"] = _openrouter_model(
+            name,
+            max_connections=args.concurrency,
+            provider_only=(
+                args.generator_provider_only
+                if args.axis_judge_method == "bounded_thinking"
+                else ()
+            ),
+            reasoning_enabled=(None if args.axis_judge_method == "bounded_thinking" else False),
+        )
+        if args.axis_judge_method == "bounded_thinking":
+            roles[f"axis_judge_force_{i}"] = _openrouter_model(
+                name,
+                max_connections=args.concurrency,
+                provider_only=args.generator_provider_only,
+                reasoning_enabled=False,
+            )
+
+    return Task(
+        name="persona_axis_validation",
+        dataset=MemoryDataset(samples, name="persona_axis_samples"),
+        solver=persona_axis_solver(_solver_config(args)),
+        scorer=persona_axis_score(),
+        model=generator,
+        model_roles=roles,
+        fail_on_error=True,
+        metadata={
+            "generator_model": args.generator_model,
+            "axis_judge_models": list(args.axis_judge_models),
+            "style_judge_model": args.judge_model,
+            "axis_judge_method": args.axis_judge_method,
+            "generator_provider_only": list(args.generator_provider_only),
+            "seed": args.seed,
+        },
+    )
+
+
+def _artifact(
+    args,
+    *,
+    axes: list[Axis],
+    templates: tuple[str, ...],
+    rows: list[dict],
+    results: list[dict],
+    dry_run: bool,
+    inspect_log: str | None = None,
+) -> dict:
+    artifact = {
+        "dry_run": dry_run,
+        "generator_model": args.generator_model,
+        "judge_model": args.judge_model,
+        "axis_judge_models": list(args.axis_judge_models),
+        "style_judge_model": args.judge_model,
+        "gen_temperature": args.gen_temperature,
+        "judge_temperature": 0.0,
+        "generator_provider_only": list(args.generator_provider_only),
+        "seed": args.seed,
+        "axis_delta_threshold": args.axis_delta_threshold,
+        "min_side_threshold": args.min_side_threshold,
+        "off_axis_threshold": args.off_axis_threshold,
+        "exclude_confound_dims": sorted(args.exclude_confound_dims),
+        "max_word_delta_frac": args.max_word_delta_frac,
+        "n_prompts": len(rows),
+        "axes": [asdict(axis) for axis in axes],
+        "templates": list(templates),
+        "results": results,
+        "summary": [] if dry_run else summarize(results, args),
+    }
+    if not dry_run:
+        artifact.update({
+            "family": args.family,
+            "inspect_log": inspect_log,
+            "n_results": len(results),
+            "n_success": len(results),
+            "n_errors": 0,
+            "axis_score_distribution": axis_score_distribution(results),
+        })
+    return artifact
+
+
 async def amain(args) -> None:
     load_dotenv(ROOT / ".env")
     axes = _select_axes(args.axes)
     templates = _select_templates(args.templates)
     rows = _select_rows(args.family, args.n, args.seed, args.n_per_source)
-    axis_judge_models = tuple(
+    args.axis_judge_models = tuple(
         model.strip() for model in args.axis_judge_models.split(",") if model.strip()
     )
-    if not axis_judge_models:
+    if not args.axis_judge_models:
         raise ValueError("--axis-judge-models selected zero models")
-    generator_provider_only = tuple(
+    args.generator_provider_only = tuple(
         provider.strip() for provider in args.generator_provider_only.split(",") if provider.strip()
     )
-    # _evaluate_one and summarize read these off args.
-    args.axis_judge_models = axis_judge_models
-    args.generator_provider_only = generator_provider_only
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1434,7 +1591,7 @@ async def amain(args) -> None:
                             axis_id=axis.id,
                             template=template,
                             generator_model=args.generator_model,
-                            judge_model=",".join(axis_judge_models) + "|" + args.judge_model,
+                            judge_model=",".join(args.axis_judge_models) + "|" + args.judge_model,
                             gen_temperature=args.gen_temperature,
                         ),
                         "row": row_i,
@@ -1452,115 +1609,52 @@ async def amain(args) -> None:
                         "neg_label": neg_label,
                         "dry_run": True,
                     })
-        artifact = {
-            "dry_run": True,
-            "generator_model": args.generator_model,
-            "judge_model": args.judge_model,
-            "axis_judge_models": list(axis_judge_models),
-            "style_judge_model": args.judge_model,
-            "gen_temperature": args.gen_temperature,
-            "judge_temperature": 0.0,
-            "generator_provider_only": list(generator_provider_only),
-            "seed": args.seed,
-            "axis_delta_threshold": args.axis_delta_threshold,
-            "min_side_threshold": args.min_side_threshold,
-            "off_axis_threshold": args.off_axis_threshold,
-            "exclude_confound_dims": sorted(args.exclude_confound_dims),
-            "max_word_delta_frac": args.max_word_delta_frac,
-            "n_prompts": len(rows),
-            "axes": [asdict(a) for a in axes],
-            "templates": list(templates),
-            "results": results,
-            "summary": [],
-        }
+        artifact = _artifact(
+            args,
+            axes=axes,
+            templates=templates,
+            rows=rows,
+            results=results,
+            dry_run=True,
+        )
         out.write_text(json.dumps(artifact, indent=2))
         print(f"dry-run wrote {out}")
         print(f"axes: {', '.join(a.id for a in axes)}")
         print(f"templates: {len(templates)}; planned pairs: {len(results)}")
         return
 
-    if not os.environ.get("OPENROUTER_API_KEY"):
-        logger.error("OPENROUTER_API_KEY not set")
-        sys.exit(1)
-
-    router = OpenRouter(Path(args.cache_dir), args.concurrency)
-    tasks = []
-    for row_i, row in enumerate(rows, start=1):
-        for axis in axes:
-            for template in templates:
-                tasks.append(_evaluate_one(
-                    router, args, axis=axis, template=template, row=row, row_i=row_i,
-                ))
+    n_pairs = len(rows) * len(axes) * len(templates)
     logger.info(
         f"{len(rows)} prompts × {len(axes)} axes × {len(templates)} templates "
-        f"= {len(tasks)} pairs; generator={args.generator_model}; "
-        f"axis_judges={','.join(axis_judge_models)}; style_judge={args.judge_model}; "
+        f"= {n_pairs} pairs; generator={args.generator_model}; "
+        f"axis_judges={','.join(args.axis_judge_models)}; style_judge={args.judge_model}; "
         f"gen_temperature={args.gen_temperature}; judge_temperature=0.0; "
         f"axis_judge_method={args.axis_judge_method}; "
-        f"generator_provider_only={','.join(generator_provider_only) or 'OpenRouter default'}"
+        f"generator_provider_only={','.join(args.generator_provider_only) or 'OpenRouter default'}"
     )
-    tasks = [asyncio.create_task(task) for task in tasks]
-    results = []
-    for task in atqdm(asyncio.as_completed(tasks), total=len(tasks), desc="persona-axes"):
-        rec = await task
-        results.append(rec)
-        artifact = {
-            "dry_run": False,
-            "generator_model": args.generator_model,
-            "judge_model": args.judge_model,
-            "axis_judge_models": list(axis_judge_models),
-            "style_judge_model": args.judge_model,
-            "gen_temperature": args.gen_temperature,
-            "judge_temperature": 0.0,
-            "family": args.family,
-            "generator_provider_only": list(generator_provider_only),
-            "seed": args.seed,
-            "axis_delta_threshold": args.axis_delta_threshold,
-            "min_side_threshold": args.min_side_threshold,
-            "off_axis_threshold": args.off_axis_threshold,
-            "exclude_confound_dims": sorted(args.exclude_confound_dims),
-            "max_word_delta_frac": args.max_word_delta_frac,
-            "n_prompts": len(rows),
-            "axes": [asdict(a) for a in axes],
-            "templates": list(templates),
-            "n_results": len(results),
-            "n_success": sum("error" not in r for r in results),
-            "n_errors": sum("error" in r for r in results),
-            "summary": summarize(results, args),
-            "axis_score_distribution": axis_score_distribution(results),
-            "results": results,
-        }
-        out.write_text(json.dumps(artifact, indent=2))
-
-    summary = summarize(results, args)
-    artifact = {
-        "dry_run": False,
-        "generator_model": args.generator_model,
-        "judge_model": args.judge_model,
-        "axis_judge_models": list(axis_judge_models),
-        "style_judge_model": args.judge_model,
-        "gen_temperature": args.gen_temperature,
-        "judge_temperature": 0.0,
-        "family": args.family,
-        "generator_provider_only": list(generator_provider_only),
-        "seed": args.seed,
-        "axis_delta_threshold": args.axis_delta_threshold,
-        "min_side_threshold": args.min_side_threshold,
-        "off_axis_threshold": args.off_axis_threshold,
-        "exclude_confound_dims": sorted(args.exclude_confound_dims),
-        "max_word_delta_frac": args.max_word_delta_frac,
-        "n_prompts": len(rows),
-        "axes": [asdict(a) for a in axes],
-        "templates": list(templates),
-        "n_results": len(results),
-        "n_success": sum("error" not in r for r in results),
-        "n_errors": sum("error" in r for r in results),
-        "summary": summary,
-        "axis_score_distribution": axis_score_distribution(results),
-        "results": results,
-    }
+    logs = await eval_async(
+        _inspect_task(args, axes, templates, rows),
+        log_dir=args.log_dir,
+        max_samples=args.concurrency,
+        fail_on_error=True,
+        debug_errors=True,
+        log_model_api=True,
+    )
+    log = logs[0]
+    results = [sample.store[RESULT_STORE_KEY] for sample in log.samples]
+    artifact = _artifact(
+        args,
+        axes=axes,
+        templates=templates,
+        rows=rows,
+        results=results,
+        dry_run=False,
+        inspect_log=log.location,
+    )
     out.write_text(json.dumps(artifact, indent=2))
     print(f"wrote {out}")
+    print(f"inspect log: {log.location}")
+    summary = artifact["summary"]
     print(tabulate(summary, headers="keys", tablefmt="pipe", floatfmt=".3f"))
     print("\naxis judge raw score distribution:")
     print(tabulate(
@@ -1613,8 +1707,8 @@ def main() -> None:
     ap.add_argument("--concurrency", type=int, default=16)
     ap.add_argument("--generator-provider-only", default="DeepInfra",
                     help="comma-separated OpenRouter providers allowed for generator calls; empty uses OpenRouter default")
-    ap.add_argument("--cache-dir", default="out/cache/persona_axes_openrouter")
-    ap.add_argument("--out", default="out/persona_axes_openrouter.json")
+    ap.add_argument("--log-dir", default="out/inspect/persona_axes")
+    ap.add_argument("--out", default="out/persona_axes.json")
     ap.add_argument("--dry-run", action="store_true",
                     help="write planned randomized A/B jobs without network calls")
     ap.add_argument("--axis-judge-method", choices=["json", "bounded_thinking"], default="json",

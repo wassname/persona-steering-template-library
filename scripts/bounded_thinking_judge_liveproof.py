@@ -15,8 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from bounded_thinking_judge import judge_once  # noqa: E402
-from validate_persona_axes_openrouter import (  # noqa: E402
-    Axis, _axis_pairwise_bounded_judge_prompt,
+from validate_persona_axes import (  # noqa: E402
+    Axis, _axis_pairwise_bounded_judge_prompt, _openrouter_model,
 )
 
 AXIS_JSON = json.loads(
@@ -44,9 +44,25 @@ async def main():
     prompt = _axis_pairwise_bounded_judge_prompt(AXIS, SCENARIO, A_TEXT, B_TEXT, pole="positive")
     print(f"model={MODEL} budget={BUDGET} axis={AXIS.id} pole=positive")
     print(f"prompt tail:\n{prompt[-400:]}\n")
-    score, found, forced = await judge_once(
-        model=MODEL, prompt=prompt, budget=BUDGET, seed=13,
+    thinking_model = _openrouter_model(
+        MODEL,
+        max_connections=1,
         provider_only=("DeepInfra",),
+        reasoning_enabled=None,
+    )
+    force_model = _openrouter_model(
+        MODEL,
+        max_connections=1,
+        provider_only=("DeepInfra",),
+        reasoning_enabled=False,
+    )
+    score, found, forced = await judge_once(
+        model=thinking_model,
+        force_model=force_model,
+        prompt=prompt,
+        budget=BUDGET,
+        seed=13,
+        max_connections=1,
     )
     print(f"\nRESULT: score={score} found={found} forced={forced}")
     print("PASS: judge committed a verdict (found=True)" if found

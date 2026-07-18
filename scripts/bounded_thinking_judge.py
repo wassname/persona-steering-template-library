@@ -1,7 +1,7 @@
-"""Bounded-thinking + force-answer judging for a reasoning judge model.
+"""Bounded-thinking plus force-answer judging through Inspect AI.
 
 Port of https://gist.github.com/wassname/72eed3a1ddfc286c5e12a118dfa30161
-adapted to this repo's openrouter_wrapper.openrouter_request client (no inspect-ai dep).
+adapted to Inspect's model interface.
 
 Problem. A small reasoning model (e.g. qwen3.5-9b) used as a JUDGE deliberates to its
 max-token budget on an ambiguous item and emits NO verdict. A parser that defaults to
@@ -27,10 +27,9 @@ The `found` flag returned throughout distinguishes a REAL "SCORE: 0" (found=True
 non-verdict (found=False). A non-verdict must NEVER be silently laundered into a tie: the
 caller treats found=False as an excluded item, not a score of 0.
 
-This is NOT a feature of inspect-ai; it is ~60 lines on top of openrouter_wrapper's
-openrouter_request primitive. "interrupt" is not a mid-stream cut: phase 1's max_tokens
-truncates the provider generation, we detect the missing verdict, and phase 2 is a fresh
-continuation call.
+This is custom judge behavior on top of Inspect's model interface. "Interrupt" is not a
+mid-stream cut: phase 1's max_tokens truncates the provider generation, we detect the
+missing verdict, and phase 2 is a fresh continuation call.
 """
 from __future__ import annotations
 
@@ -38,8 +37,15 @@ import asyncio
 import re
 from typing import Any
 
+from inspect_ai.model import (
+    CachePolicy,
+    ChatMessageAssistant,
+    ChatMessageUser,
+    ContentReasoning,
+    GenerateConfig,
+    Model,
+)
 from loguru import logger
-from openrouter_wrapper.retry import openrouter_request
 
 # phase-1 thinking params (Qwen3 thinking card): temp0 is OOD and loops.
 THINK: dict[str, Any] = dict(temperature=1.0, top_p=0.95, top_k=20, presence_penalty=1.5)
@@ -60,31 +66,27 @@ def parse_score(text: str) -> tuple[int, bool]:
     return 0, False
 
 
-def _reasoning_tail(message: dict, n: int = 2000) -> str:
+def _reasoning_tail(message: ChatMessageAssistant, n: int = 2000) -> str:
     """The model's (possibly truncated) thinking text, to seed the forced continuation."""
-    reasoning = ""
-    for key in ("reasoning", "reasoning_content"):
-        val = message.get(key)
-        if isinstance(val, str) and val:
-            reasoning = val
-            break
-    # some providers nest reasoning inside content parts
-    content = message.get("content")
-    if isinstance(content, list):
-        parts = [getattr(x, "reasoning", "") for x in content if getattr(x, "reasoning", "")]
-        if parts:
-            reasoning = "\n".join(str(p) for p in parts)
+    content = message.content
+    parts = (
+        [part.reasoning for part in content if isinstance(part, ContentReasoning)]
+        if isinstance(content, list)
+        else []
+    )
+    reasoning = "\n".join(parts)
     return reasoning[-n:] if reasoning else ""
 
 
 async def judge_once(
     *,
-    model: str,
+    model: Model,
+    force_model: Model,
     prompt: str,
     budget: int = DEFAULT_BUDGET,
     seed: int | None = None,
-    provider_only: tuple[str, ...] = (),
-    openrouter_api_key: str | None = None,
+    max_connections: int = 16,
+    cache: CachePolicy | bool = True,
 ) -> tuple[int, bool, bool]:
     """One bounded-thinking judgment that ALWAYS commits.
 
@@ -92,76 +94,91 @@ async def judge_once(
     `found` is True iff a real SCORE line was emitted (phase 1 or 2); found=False means
     the judge never committed and the caller must exclude the item, not vote 0.
     """
-    payload_phase1: dict[str, Any] = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": budget,
-        **THINK,
-    }
-    if seed is not None:
-        payload_phase1["seed"] = seed
-    if provider_only:
-        payload_phase1["provider"] = {"only": list(provider_only), "allow_fallbacks": False}
-
-    r1 = await openrouter_request(payload_phase1, timeout=120.0, OPENROUTER_API_KEY=openrouter_api_key)
-    msg1 = r1["choices"][0]["message"]
-    content1 = msg1.get("content") or ""
+    phase1_config = GenerateConfig(
+        max_tokens=budget,
+        temperature=THINK["temperature"],
+        top_p=THINK["top_p"],
+        presence_penalty=THINK["presence_penalty"],
+        seed=seed,
+        max_connections=max_connections,
+        timeout=120,
+        extra_body={"top_k": THINK["top_k"]},
+    )
+    output1 = await model.generate(prompt, config=phase1_config, cache=cache)
+    content1 = output1.completion
     score, found = parse_score(content1)
     if found:
         return score, True, False
 
     # phase 2: out of budget -> continue the conversation and FORCE a direct answer
     msgs = [
-        {"role": "user", "content": prompt},
-        {"role": "assistant", "content": _reasoning_tail(msg1) or "(thinking truncated)"},
-        {"role": "user", "content": "You are out of thinking time. Answer NOW: first line "
-                                    "exactly `SCORE: <int -5..+5>`."},
+        ChatMessageUser(content=prompt),
+        ChatMessageAssistant(
+            content=_reasoning_tail(output1.message) or "(thinking truncated)"
+        ),
+        ChatMessageUser(
+            content="You are out of thinking time. Answer NOW: first line "
+            "exactly `SCORE: <int -5..+5>`."
+        ),
     ]
-    payload_phase2: dict[str, Any] = {
-        "model": model,
-        "messages": msgs,
-        "max_tokens": 256,
-        "reasoning": {"exclude": True, "effort": "none"},
-        "reasoning_effort": "none",
-        "include_reasoning": False,
-        **FORCE,
-    }
-    if seed is not None:
-        payload_phase2["seed"] = seed
-    if provider_only:
-        payload_phase2["provider"] = {"only": list(provider_only), "allow_fallbacks": False}
-
-    r2 = await openrouter_request(payload_phase2, timeout=90.0, OPENROUTER_API_KEY=openrouter_api_key)
-    content2 = r2["choices"][0]["message"].get("content") or ""
+    phase2_config = GenerateConfig(
+        max_tokens=256,
+        temperature=FORCE["temperature"],
+        top_p=FORCE["top_p"],
+        presence_penalty=FORCE["presence_penalty"],
+        seed=seed,
+        max_connections=max_connections,
+        timeout=90,
+        reasoning_effort="none",
+        extra_body={"top_k": FORCE["top_k"], "include_reasoning": False},
+    )
+    output2 = await force_model.generate(msgs, config=phase2_config, cache=cache)
+    content2 = output2.completion
     score, found = parse_score(content2)
     if not found:
         logger.warning("bounded judge: forced phase-2 answer still had no SCORE "
-                       f"(model={model}); excluding item, NOT voting 0")
+                       f"(model={model.name}); excluding item, NOT voting 0")
     return score, found, True
 
 
 async def judge(
     *,
-    model: str,
+    model: Model,
+    force_model: Model,
     prompt: str,
     n: int = DEFAULT_N,
     budget: int = DEFAULT_BUDGET,
     seed: int | None = None,
-    provider_only: tuple[str, ...] = (),
-    openrouter_api_key: str | None = None,
+    max_connections: int = 16,
+    cache: CachePolicy | bool = True,
 ) -> dict:
-    """N bounded-thinking samples, averaged. openrouter_wrapper throttles to the
-    connection limit, so gathering N (and, at the call site, all items x directions)
-    is safe and fast.
+    """N bounded-thinking samples, averaged under Inspect's connection limit.
 
     Returns a dict: {score, found_rate, forced_rate, n, budget, samples}.
     `score` is the rounded mean over samples that committed (found=True); if no sample
     committed, score is 0 with found_rate=0.0 and the caller must exclude the item.
     """
+    sample_caches = [
+        cache.model_copy(update={
+            "scopes": {**cache.scopes, "bounded_sample": str(i)},
+        })
+        if isinstance(cache, CachePolicy)
+        else cache
+        for i in range(n)
+    ]
     samples = await asyncio.gather(
-        *[judge_once(model=model, prompt=prompt, budget=budget, seed=seed,
-                     provider_only=provider_only,
-                     openrouter_api_key=openrouter_api_key) for _ in range(n)]
+        *[
+            judge_once(
+                model=model,
+                force_model=force_model,
+                prompt=prompt,
+                budget=budget,
+                seed=seed,
+                max_connections=max_connections,
+                cache=sample_caches[i],
+            )
+            for i in range(n)
+        ]
     )
     committed = [(s, forced) for (s, found, forced) in samples if found]
     found_rate = len(committed) / len(samples) if samples else 0.0
