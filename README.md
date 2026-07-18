@@ -36,15 +36,13 @@ The controlled model answers:
 
 Here, strength `1` pushes toward "tripping"; a negative strength pushes toward "sober."
 
-This repo handles the first step. Give it a behavior and target model; it validates one persona pair, 50 scenarios, and one template before you train a steering vector. Blinded LLM judges score the target model's answers, then the agent checks samples. Prompts fail when refusal, answer length, style, or copied persona labels explain the difference better than the intended behavior.
+This repo validates the inputs to step 1: one persona pair, 50 scenarios, and one template for your target model. It rejects prompts where refusal, answer length, style, or copied persona labels explain the difference better than the intended behavior.
 
 ## Use it
 
 Have your agent read [`SKILL.md`](SKILL.md), then ask:
 
 > Use `$persona-steering-template-library` to find validated steering ingredients for `PERSONA_OR_BEHAVIOR` on `TARGET_MODEL`. Return one persona pair, the top 50 scenarios, and one template.
-
-The skill contains the commands and decision rules.
 
 ## Previous results
 
