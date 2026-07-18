@@ -13,7 +13,7 @@ LIB=/media/wassname/SGIronWolf/projects5/2026/weight-steering-repos/persona-stee
 cd "$LIB"
 
 OUT=out/${AXIS_ID}_stage_b_bounded.json
-UV run python scripts/validate_persona_axes_openrouter.py \
+uv run python scripts/validate_persona_axes.py \
   --generator-model qwen/qwen3-14b \
   --generator-provider-only DeepInfra \
   --judge-model google/gemini-3.1-flash-lite-preview \

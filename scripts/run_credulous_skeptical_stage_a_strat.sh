@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-uv run python scripts/validate_persona_axes_openrouter.py \
+uv run python scripts/validate_persona_axes.py \
   --generator-model qwen/qwen3-14b \
   --generator-provider-only DeepInfra \
   --judge-model google/gemini-3.1-flash-lite-preview \

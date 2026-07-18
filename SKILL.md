@@ -9,7 +9,7 @@ This library finds the prompt ingredients for a steering axis. A persona pair gi
 
 A steering direction averages the difference between the model's internal activations on the positive and negative prompts. If one persona also makes the answer longer, more formal, or more likely to refuse, the direction can learn that difference too. This validator compares positive, negative, and no-persona answers on the target model so the agent can choose 50 clean scenarios and one template.
 
-Run from the directory containing this file. Run `uv sync` once. Live validation requires `OPENROUTER_API_KEY`.
+Run from the directory containing this file. Run `uv sync` once. Live validation requires `OPENROUTER_API_KEY`. Each live result JSON includes its `inspect_log` path; open logs with `uv run inspect view --log-dir out/inspect/persona_axes`.
 
 ## Procedure
 
@@ -18,7 +18,7 @@ Run from the directory containing this file. Run `uv sync` once. Live validation
 2. Read [Choosing scenarios](docs/choosing_scenarios.md), assemble a broad scenario pool, and rank it using a strong previous template. Dry-run first, then remove `--dry-run` for the live run.
 
    ```sh
-   uv run python scripts/validate_persona_axes_openrouter.py \
+   uv run python scripts/validate_persona_axes.py \
      --generator-model TARGET_MODEL \
      --axes data/personas/persona_pairs_AXIS_ID.jsonl \
      --templates 'Use the priorities of a {persona} person.' \
@@ -41,7 +41,7 @@ Run from the directory containing this file. Run `uv sync` once. Live validation
 4. Test the full template catalog on those 50 scenarios, then rank the templates.
 
    ```sh
-   uv run python scripts/validate_persona_axes_openrouter.py \
+   uv run python scripts/validate_persona_axes.py \
      --generator-model TARGET_MODEL \
      --axes data/personas/persona_pairs_AXIS_ID.jsonl \
      --templates data/templates/template_catalog.yaml \
@@ -59,5 +59,5 @@ Run from the directory containing this file. Run `uv sync` once. Live validation
 - [Previous template results](README.md#previous-results)
 - [Choosing scenarios](docs/choosing_scenarios.md)
 - [Template catalog](data/templates/template_catalog.yaml)
-- [Validator flags](scripts/validate_persona_axes_openrouter.py)
+- [Validator flags](scripts/validate_persona_axes.py)
 - [Persona prompt literature review](docs/persona_prompt_literature_review.md)

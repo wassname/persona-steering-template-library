@@ -8,4 +8,4 @@ Drop scenarios when the main difference is refusal, response length, formatting,
 
 Use a broad mix of sources, inspect the validator's printed examples, then rank the clean results. The skill exports the top 50 for the template screen.
 
-Candidate data lives under [`data/scenarios/`](../data/scenarios/). The validator is [`scripts/validate_persona_axes_openrouter.py`](../scripts/validate_persona_axes_openrouter.py).
+Candidate data lives under [`data/scenarios/`](../data/scenarios/). The validator is [`scripts/validate_persona_axes.py`](../scripts/validate_persona_axes.py), and each live run records an Inspect `.eval` log next to the selection artifact.
