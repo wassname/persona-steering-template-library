@@ -1,10 +1,42 @@
 # Persona steering template library
 
-[Steering](https://www.lesswrong.com/posts/5spBue2z2tw4JuDCx/steering-gpt-2-xl-by-adding-an-activation-vector/) lets you push a language model toward a behavior, such as honesty, across many prompts. A common method learns a direction from positive and negative examples, then applies that direction to the model's activations or weights.
+[Steering](https://www.lesswrong.com/posts/5spBue2z2tw4JuDCx/steering-gpt-2-xl-by-adding-an-activation-vector/) intervenes in a model's internals to change how it behaves. You can learn a "tripping versus sober" direction, then add it while the model answers an ordinary prompt. The same method can steer behaviors such as honesty or skepticism.
 
-This repo prepares the prompt dataset used to learn the steering direction. Give it a behavior and a target model; it returns a positive/negative persona pair, 50 scenarios, and one template. Your steering code then learns and applies the direction from those files.
+A simplified [repeng](https://github.com/vgel/repeng) run looks like this:
 
-For example, `honest` and `dishonest` are a persona pair. `Answer as a {persona} person.` is a template, and `What should you say when you are unsure?` is a scenario. The validator generates three separate answers: one for each persona and one with no persona. Blinded LLM judges score the answers, then the agent checks samples before accepting the result. It rejects prompts where the main difference is refusal, answer length, style, or copied persona labels.
+```python
+# 1. Make paired prompts that differ only in persona.
+trippy_dataset = make_dataset(
+    "Act as if you're extremely {persona}.",  # template
+    ["high on psychedelic drugs"],            # positive persona
+    ["sober from psychedelic drugs"],         # negative persona
+    truncated_output_suffixes,                 # scenarios both personas complete
+)
+
+# 2. Learn their average activation difference.
+trippy_vector = ControlVector.train(model, tokenizer, trippy_dataset)
+
+# 3. Add that direction while answering a new prompt.
+model.set_control(trippy_vector, 1)
+out = model.generate(
+    **tokenizer(
+        "[INST] Give me a one-sentence pitch for a TV show. [/INST]",
+        return_tensors="pt",
+    ),
+    do_sample=False,
+    max_new_tokens=128,
+    repetition_penalty=1.1,
+)
+print(tokenizer.decode(out.squeeze()).strip())
+```
+
+The controlled model answers:
+
+> "Our TV show is a wild ride through a world of vibrant colors, mesmerizing patterns, and psychedelic adventures that will transport you to a realm beyond your wildest dreams."
+
+Here, strength `1` pushes toward "tripping"; a negative strength pushes toward "sober."
+
+This repo handles the first step. Give it a behavior and target model; it validates one persona pair, 50 scenarios, and one template before you train a steering vector. Blinded LLM judges score the target model's answers, then the agent checks samples. Prompts fail when refusal, answer length, style, or copied persona labels explain the difference better than the intended behavior.
 
 ## Use it
 
