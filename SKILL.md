@@ -15,7 +15,7 @@ Run from the directory containing this file. Run `uv sync` once. Live validation
 
 1. Start from the persona or behavior the user wants to steer. Read [Pick a persona pair](docs/choosing_personas.md#pick-a-persona-pair), check for a matching pair in [`data/personas/`](data/personas/), then write or fix `data/personas/persona_pairs_AXIS_ID.jsonl`. The two sides should be direct opposites with matched wording.
 
-2. Read [Choosing scenarios](docs/choosing_scenarios.md), assemble a broad scenario pool, and rank it using a strong previous template. Dry-run first, then remove `--dry-run` for the live run.
+2. Pick scenario pools from the table in [Choosing scenarios](docs/choosing_scenarios.md#available-scenario-pools) (12 files in [`data/scenarios/`](data/scenarios/), each tagged with its point of view and axes), match their framing to your behavior, and rank the pool with a strong previous template. Dry-run first, then remove `--dry-run` for the live run.
 
    ```sh
    uv run python scripts/validate_persona_axes.py \
@@ -57,7 +57,7 @@ Run from the directory containing this file. Run `uv sync` once. Live validation
 ## Links
 
 - [Previous template results](README.md#previous-results)
-- [Choosing scenarios](docs/choosing_scenarios.md)
+- [Choosing scenarios](docs/choosing_scenarios.md) and the [scenario pools](data/scenarios/)
 - [Template catalog](data/templates/template_catalog.yaml)
 - [Validator flags](scripts/validate_persona_axes.py)
 - [Persona prompt literature review](docs/persona_prompt_literature_review.md)
