@@ -8,9 +8,9 @@ Drop scenarios when the main difference is refusal, response length, formatting,
 
 Use a broad mix of sources, inspect the validator's printed examples, then rank the clean results. The skill exports the top 50 for the template screen.
 
-## Available scenario pools
+## Available scenario datasets
 
-Candidate data lives under [`data/scenarios/`](../data/scenarios/). Every generated row has the same fields (`text`, `axes`, `source`, `source_id`, `self_contained`), so pools can be concatenated or screened one at a time. The loaders that produce them are in [`scripts/scenario_sources/loaders.py`](../scripts/scenario_sources/loaders.py); regenerate with `uv run python scripts/scenario_sources/export_scenarios.py --sources all --limit 1999`.
+Candidate data lives under [`data/scenarios/`](../data/scenarios/). Every generated row has the same fields (`text`, `axes`, `source`, `source_id`, `self_contained`), so datasets can be concatenated or screened one at a time. The loaders that produce them are in [`scripts/scenario_sources/loaders.py`](../scripts/scenario_sources/loaders.py); regenerate with `uv run python scripts/scenario_sources/export_scenarios.py --sources all --limit 1999`.
 
 | file | rows | frame / point of view | common axes | upstream source |
 |---|---:|---|---|---|
@@ -27,6 +27,6 @@ Candidate data lives under [`data/scenarios/`](../data/scenarios/). Every genera
 | [`scenarios_w2s_character_3p.jsonl`](../data/scenarios/scenarios_w2s_character_3p.jsonl) | 52 | third-person observer, "what does the actor do next" | Moral Foundations (extra `pov`/`frame`/`foundation` fields) | tiny Moral Foundations Vignettes (Clifford et al. 2015) |
 | [`scenarios_v2_candidates.jsonl`](../data/scenarios/scenarios_v2_candidates.jsonl) | 12 | hand-authored AI-safety probes (`prompt` field only) | synthetic, untagged | in-house |
 
-Match the point of view to the behavior you steer. Judging framings (ethics_qna, social_chem, moral_stories) suit moral-priority axes; instruction-completion framings (genies, sycophancy_eval) suit honesty-versus-sycophancy; first-person agent framings (airisk, machiavelli, genies_agentic) suit self-preservation and oversight axes. The two small files (`w2s_character_3p`, `v2_candidates`) are hand-curated probes, not bulk pools, and use a bare `prompt` field rather than the standard schema.
+Match the point of view to the behavior you steer. Judging framings (ethics_qna, social_chem, moral_stories) suit moral-priority axes; instruction-completion framings (genies, sycophancy_eval) suit honesty-versus-sycophancy; first-person agent framings (airisk, machiavelli, genies_agentic) suit self-preservation and oversight axes. The two small files (`w2s_character_3p`, `v2_candidates`) are hand-curated probe sets, not bulk datasets, and use a bare `prompt` field rather than the standard schema.
 
 The validator is [`scripts/validate_persona_axes.py`](../scripts/validate_persona_axes.py), and each live run records an Inspect `.eval` log next to the selection artifact.

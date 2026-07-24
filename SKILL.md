@@ -15,14 +15,14 @@ Run from the directory containing this file. Run `uv sync` once. Live validation
 
 1. Start from the persona or behavior the user wants to steer. Read [Pick a persona pair](docs/choosing_personas.md#pick-a-persona-pair), check for a matching pair in [`data/personas/`](data/personas/), then write or fix `data/personas/persona_pairs_AXIS_ID.jsonl`. The two sides should be direct opposites with matched wording.
 
-2. Pick scenario pools from the table in [Choosing scenarios](docs/choosing_scenarios.md#available-scenario-pools) (12 files in [`data/scenarios/`](data/scenarios/), each tagged with its point of view and axes), match their framing to your behavior, and rank the pool with a strong previous template. Dry-run first, then remove `--dry-run` for the live run.
+2. Pick scenario datasets from the table in [Choosing scenarios](docs/choosing_scenarios.md#available-scenario-datasets) (12 files in [`data/scenarios/`](data/scenarios/), each tagged with its point of view and axes), match their framing to your behavior, and rank the combined set with a strong previous template. Dry-run first, then remove `--dry-run` for the live run.
 
    ```sh
    uv run python scripts/validate_persona_axes.py \
      --generator-model TARGET_MODEL \
      --axes data/personas/persona_pairs_AXIS_ID.jsonl \
      --templates 'Use the priorities of a {persona} person.' \
-     --family data/scenarios/SCENARIO_POOL.jsonl \
+     --family data/scenarios/SCENARIO_DATASET.jsonl \
      --n-per-source 100 --seed 13 --dry-run \
      --out out/AXIS_ID/scenario_screen.json
    ```
@@ -56,8 +56,9 @@ Run from the directory containing this file. Run `uv sync` once. Live validation
 
 ## Links
 
-- [Previous template results](README.md#previous-results)
-- [Choosing scenarios](docs/choosing_scenarios.md) and the [scenario pools](data/scenarios/)
-- [Template catalog](data/templates/template_catalog.yaml)
-- [Validator flags](scripts/validate_persona_axes.py)
-- [Persona prompt literature review](docs/persona_prompt_literature_review.md)
+- [Choosing scenarios](docs/choosing_scenarios.md) and the [scenario datasets](data/scenarios/): open when step 2 needs the dataset table (rows, point of view, axes, source) to pick which files to screen.
+- [Choosing personas](docs/choosing_personas.md): open in step 1 to write or fix a persona pair, or when a validated pair loads a nuisance axis (length, refusal, persona-echo) instead of the intended one.
+- [Template catalog](data/templates/template_catalog.yaml): the full template list for step 4; open to see the exact `{persona}` strings before ranking.
+- [Previous template results](README.md#previous-results): starting templates ranked by an earlier pilot; open when you want a strong template for the step-2 screen before the catalog run.
+- [Validator flags](scripts/validate_persona_axes.py): open when you need a flag the runbook commands do not show (model, judge, seed, output paths).
+- [Persona prompt literature review](docs/persona_prompt_literature_review.md): open when writing a new pair and you want phrasing precedents from prior steering repos and papers.
