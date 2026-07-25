@@ -9,16 +9,18 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import sys
 from pathlib import Path
 from typing import Any
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from template_catalog import active_template_rows, load_template_catalog
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
 
+from template_catalog import active_template_rows, load_template_catalog  # noqa: E402
 
-ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 PERSONA_DATA = DATA / "personas"
 STATS = ROOT / "data/results/stats"

@@ -12,7 +12,7 @@ from tabulate import tabulate
 
 import docs_results
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PAIR_STATS = docs_results.REFUSAL_MODEL_PAIR_STATS
 DEFAULT_OUT_PREFIX = docs_results.REFUSAL_MODEL_PREFIX
 

@@ -7,7 +7,7 @@ import statistics
 from typing import Any
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 STATS = ROOT / "data/results/stats"
 MODEL_MATRIX = ROOT / "data/results/model_matrix"
 DOCS_MODEL_MATRIX = ROOT / "docs/results/model_matrix"

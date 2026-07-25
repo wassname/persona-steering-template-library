@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
-from template_catalog import (
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+
+from template_catalog import (  # noqa: E402
     CATALOG_PATH,
     CATALOG_JSONL_PATH,
     TEMPLATES_TXT_PATH,
