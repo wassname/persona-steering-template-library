@@ -15,7 +15,7 @@ Run from the directory containing this file. Run `uv sync` once. Live validation
 
 1. Start from the persona or behavior the user wants to steer. Read [Pick a persona pair](docs/choosing_personas.md#pick-a-persona-pair), check for a matching pair in [`data/personas/`](data/personas/), then write or fix `data/personas/persona_pairs_AXIS_ID.jsonl`. The two sides should be direct opposites with matched wording.
 
-2. Pick scenario datasets from the table in [Choosing scenarios](docs/choosing_scenarios.md#available-scenario-datasets) (12 files in [`data/scenarios/`](data/scenarios/), each tagged with its point of view and axes), match their framing to your behavior, and rank the combined set with a strong previous template. Dry-run first, then remove `--dry-run` for the live run.
+2. Pick scenario datasets from the table in [Choosing scenarios](docs/choosing_scenarios.md#available-scenario-datasets) (13 files in [`data/scenarios/`](data/scenarios/), each tagged with its point of view and axes), match their framing to your behavior, and rank the combined set with a strong previous template. Dry-run first, then remove `--dry-run` for the live run.
 
    ```sh
    uv run python scripts/validate_persona_axes.py \

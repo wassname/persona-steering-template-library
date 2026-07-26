@@ -1,4 +1,4 @@
-"""Load public value and moral-decision datasets as scenario prompt rows.
+"""Load public datasets as scenario prompt rows.
 
 Each loader returns dictionaries with `text`, `axes`, `source`, and `source_id`.
 `export_scenarios.py` writes these rows to `data/scenarios/`; the validator then
