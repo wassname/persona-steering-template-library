@@ -1,0 +1,56 @@
+# Run config for the credulous_skeptical axis, lifted verbatim from the old
+# scripts/run_credulous_skeptical_stage_{a,b}_strat.sh so resolved argv is unchanged.
+axis_id: credulous_skeptical
+pair: data/personas/persona_pairs_credulous_skeptical.jsonl
+
+generator_model: qwen/qwen3-14b
+generator_provider_only: DeepInfra
+judge_model: google/gemini-3.1-flash-lite-preview
+axis_judge_models: [qwen/qwen3-14b]
+axis_judge_method: bounded_thinking
+axis_judge_n: 2
+axis_judge_budget: 4096
+seed: 13
+concurrency: 8
+
+# Deliberately unset, unlike truth_over_approval. A credulity axis is not entangled with
+# the honesty/sycophancy confound dims, so nothing is excluded here.
+exclude_confound_dims: []
+
+stage_a:
+  # ALL ~100 templates x 1 scenario/source (13 sources) = ~1300 pairs
+  templates: data/templates/template_catalog.yaml
+  n_per_source: 1
+  families:
+    - data/scenarios/scenarios_daily_dilemmas.jsonl
+    - data/scenarios/scenarios_bullshit_benchmark.jsonl
+    - data/scenarios/scenarios_moral_stories.jsonl
+    - data/scenarios/scenarios_social_chem.jsonl
+    - data/scenarios/scenarios_ethics_qna.jsonl
+    - data/scenarios/scenarios_airisk.jsonl
+    - data/scenarios/scenarios_genies_sycophancy.jsonl
+    - data/scenarios/scenarios_machiavelli.jsonl
+    - data/scenarios/scenarios_valuebench.jsonl
+    - data/scenarios/scenarios_sycophancy_eval.jsonl
+    - data/scenarios/scenarios_genies_agentic.jsonl
+    - data/scenarios/scenarios_w2s_character_3p.jsonl
+    - data/scenarios/scenarios_v2_candidates.jsonl
+
+stage_b:
+  # 1 winner template x up to 100 scenarios/source (11 sources) = ~1055 pairs.
+  # Note this uses n_per_source over 11 sources while truth_over_approval's stage B used
+  # n=40 over 6. Preserved rather than normalised; see task #8.
+  templates: data/templates/template_winner_credulity.yaml
+  n_per_source: 100
+  families:
+    - data/scenarios/scenarios_daily_dilemmas.jsonl
+    - data/scenarios/scenarios_bullshit_benchmark.jsonl
+    - data/scenarios/scenarios_moral_stories.jsonl
+    - data/scenarios/scenarios_social_chem.jsonl
+    - data/scenarios/scenarios_ethics_qna.jsonl
+    - data/scenarios/scenarios_airisk.jsonl
+    - data/scenarios/scenarios_genies_sycophancy.jsonl
+    - data/scenarios/scenarios_machiavelli.jsonl
+    - data/scenarios/scenarios_valuebench.jsonl
+    - data/scenarios/scenarios_sycophancy_eval.jsonl
+    - data/scenarios/scenarios_genies_agentic.jsonl

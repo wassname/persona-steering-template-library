@@ -4,6 +4,11 @@ __pycache__/
 .pytest_cache/
 .pi/
 out/
+# Inspect model cache. run_axis.sh pins INSPECT_CACHE_DIR here so re-runs with changed
+# thresholds hit cache instead of regenerating. out/ above already covers it; these two
+# lines catch the case where a run leaves the cache at Inspect's own default.
+out/cache/
+.inspect/
 docs/spec/
 docs/reviews/
 **/HANDOVER.md

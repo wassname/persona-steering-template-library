@@ -1,0 +1,53 @@
+# Run config for the truth_over_approval axis, lifted verbatim from the old
+# scripts/run_truth_over_approval_stage_a_strat.sh so resolved argv is unchanged.
+axis_id: truth_over_approval
+pair: data/personas/persona_pairs_truth_over_approval.jsonl
+
+generator_model: qwen/qwen3-14b
+generator_provider_only: DeepInfra
+judge_model: google/gemini-3.1-flash-lite-preview
+axis_judge_models: [qwen/qwen3-14b]
+axis_judge_method: bounded_thinking
+axis_judge_n: 2
+axis_judge_budget: 4096
+seed: 13
+concurrency: 8
+
+# On-axis dims that circularly penalise an honesty axis: an honest response *should*
+# score differently on truthfulness, so counting that as a confound rejects the signal.
+# credulous_skeptical deliberately does not set this. That difference used to be
+# invisible argv drift between two near-identical shell scripts.
+exclude_confound_dims: [honesty_truthfulness, praise_flattery, sycophancy]
+
+stage_a:
+  # ALL ~100 templates x 1 scenario/source (12 sources) = ~1200 pairs
+  templates: data/templates/template_catalog.yaml
+  n_per_source: 1
+  families:
+    - data/scenarios/scenarios_daily_dilemmas.jsonl
+    - data/scenarios/scenarios_moral_stories.jsonl
+    - data/scenarios/scenarios_social_chem.jsonl
+    - data/scenarios/scenarios_ethics_qna.jsonl
+    - data/scenarios/scenarios_airisk.jsonl
+    - data/scenarios/scenarios_genies_sycophancy.jsonl
+    - data/scenarios/scenarios_machiavelli.jsonl
+    - data/scenarios/scenarios_valuebench.jsonl
+    - data/scenarios/scenarios_sycophancy_eval.jsonl
+    - data/scenarios/scenarios_genies_agentic.jsonl
+    - data/scenarios/scenarios_w2s_character_3p.jsonl
+    - data/scenarios/scenarios_v2_candidates.jsonl
+
+stage_b:
+  # Winner template x larger pool. The old generic stage-B driver
+  # (run_honesty_credulity_stage_b.sh) used only these 6 sources and --n, where
+  # credulous_skeptical's stage B used 10 sources and --n-per-source. Preserved as-is
+  # rather than silently normalised; see task #8 before trusting a cross-axis comparison.
+  templates: data/templates/template_winner_honesty.yaml
+  n: 40
+  families:
+    - data/scenarios/scenarios_daily_dilemmas.jsonl
+    - data/scenarios/scenarios_moral_stories.jsonl
+    - data/scenarios/scenarios_social_chem.jsonl
+    - data/scenarios/scenarios_ethics_qna.jsonl
+    - data/scenarios/scenarios_airisk.jsonl
+    - data/scenarios/scenarios_genies_sycophancy.jsonl

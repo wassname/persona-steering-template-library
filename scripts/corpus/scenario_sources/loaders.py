@@ -1,4 +1,4 @@
-"""Load public value and moral-decision datasets as scenario prompt rows.
+"""Load public datasets as scenario prompt rows.
 
 Each loader returns dictionaries with `text`, `axes`, `source`, and `source_id`.
 `export_scenarios.py` writes these rows to `data/scenarios/`; the validator then
@@ -485,6 +485,23 @@ def load_genies_sycophancy(limit: int | None = None) -> list[dict]:
     return _genies_rows(_GENIES_SYCOPHANCY, "genies_sycophancy", limit)
 
 
+def load_bullshit_benchmark(limit: int | None = None) -> list[dict]:
+    url = "https://raw.githubusercontent.com/petergpt/bullshit-benchmark/main/questions.json"
+    data = json.loads(_url_text(url))
+    out: list[dict] = []
+    for technique in data["techniques"]:
+        for question in technique["questions"]:
+            out.append({
+                "text": question["question"].strip(),
+                "axes": ["credulity", "skepticism", "nonsense_detection"],
+                "source": "bullshit_benchmark",
+                "source_id": f"bullshit_benchmark_{technique['technique']}_{question['id']}",
+            })
+            if limit is not None and len(out) >= limit:
+                return out
+    return out
+
+
 def load_valuebench(limit: int | None = None) -> list[dict]:
     url = "https://raw.githubusercontent.com/ValueByte-AI/ValueBench/main/data/value_orientation.csv"
     rows = csv.DictReader(io.StringIO(_url_text(url)))
@@ -523,6 +540,7 @@ LOADERS = {
     "ethics_qna": load_ethics_qna,
     "machiavelli": load_machiavelli,
     "sycophancy_eval": load_sycophancy_eval,
+    "bullshit_benchmark": load_bullshit_benchmark,
     "genies_agentic": load_genies_agentic,
     "genies_sycophancy": load_genies_sycophancy,
     "valuebench": load_valuebench,

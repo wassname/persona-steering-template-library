@@ -8,7 +8,7 @@ from typing import Any
 
 from loaders import LOADERS
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 OUT_DIR = ROOT / "data" / "scenarios"
 
 
